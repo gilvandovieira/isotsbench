@@ -1131,3 +1131,14 @@ work performed behind the boundary
 `isotsbench` exists to measure that relationship.
 
 **TypeScript describes. Native code executes. Measure where that model makes sense.**
+
+---
+
+# License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.

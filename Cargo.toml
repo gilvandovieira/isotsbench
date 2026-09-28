@@ -5,6 +5,7 @@ members = ["native/rust-core", "native/napi", "native/ffi"]
 [workspace.package]
 edition = "2021"
 publish = false
+license = "MIT OR Apache-2.0"
 
 # Default release profile on purpose: no LTO or target-cpu tuning until a
 # baseline exists. Any change here must be recorded with published results.
