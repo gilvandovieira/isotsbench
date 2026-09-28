@@ -4,18 +4,18 @@ version = 4
 
 [[package]]
 name = "isotsbench-core"
-version = "0.1.0"
+version = "0.3.0"
 
 [[package]]
 name = "isotsbench-ffi"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "isotsbench-core",
 ]
 
 [[package]]
 name = "isotsbench-napi"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "isotsbench-core",
 ]

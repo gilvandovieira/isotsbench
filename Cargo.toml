@@ -3,6 +3,8 @@ resolver = "2"
 members = ["native/rust-core", "native/napi", "native/ffi"]
 
 [workspace.package]
+# Matches the latest release tag (vX.Y.Z); bump it together with the tag.
+version = "0.3.0"
 edition = "2021"
 publish = false
 license = "MIT OR Apache-2.0"
