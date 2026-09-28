@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["native/rust-core", "native/napi"]
+members = ["native/rust-core", "native/napi", "native/ffi"]
 
 [workspace.package]
 edition = "2021"
