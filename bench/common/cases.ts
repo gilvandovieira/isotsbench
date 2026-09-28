@@ -8,13 +8,17 @@
 
 import * as ts from "./ts-impl.ts";
 import { loadNapi } from "./napi.ts";
+import { ffiBinding, loadFfi } from "./ffi.ts";
 
-export type Impl = "ts" | "napi";
+/** ts: pure TypeScript; napi: Node-API addon; ffi: C ABI via the runtime's FFI (Bun, Deno only). */
+export type Impl = "ts" | "napi" | "ffi";
 
 export interface Case {
   id: string;
   op: string;
   impl: Impl;
+  /** Mechanism crossing into native code: "none", "node-api", "bun:ffi" or "Deno.dlopen". */
+  binding: string;
   /** Workload size (elements) for scalable operations. */
   size: number | null;
   run(iterations: number): number;
@@ -23,6 +27,10 @@ export interface Case {
 export const SUM_I32_SIZES = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000];
 
 const napi = loadNapi();
+const ffi = loadFfi();
+const BINDINGS: Record<Impl, string> = { ts: "none", napi: "node-api", ffi: ffiBinding() ?? "unavailable" };
+/** Implementations this runtime can run, in canonical order. */
+const IMPLS: Impl[] = ffi ? ["ts", "napi", "ffi"] : ["ts", "napi"];
 
 const tsNoop = ts.noop;
 const tsAdd = ts.add_i32;
@@ -30,6 +38,10 @@ const tsSum = ts.sum_i32;
 const napiNoop = napi.noop;
 const napiAdd = napi.add_i32;
 const napiSum = napi.sum_i32;
+// Only called from FFI cases, which exist only when `ffi` is loaded.
+const ffiNoop = ffi?.noop;
+const ffiAdd = ffi?.add_i32;
+const ffiSum = ffi?.sum_i32;
 
 /** Deterministic pseudo-random i32 values (LCG), identical in every runtime. */
 export function makeI32Data(size: number): Int32Array {
@@ -54,17 +66,21 @@ function sumNapiLoop(iterations: number, data: Int32Array): number {
   return acc;
 }
 
+// The length argument is part of the FFI call: a C function cannot read it from the array.
+function sumFfiLoop(iterations: number, data: Int32Array): number {
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) acc = (acc + ffiSum!(data, data.length)) | 0;
+  return acc;
+}
+
 function sumCase(impl: Impl, size: number): Case {
   const data = makeI32Data(size);
-  return {
-    id: `sum_i32/${impl}/${size}`,
-    op: "sum_i32",
-    impl,
-    size,
-    run: impl === "ts"
-      ? (iterations) => sumTsLoop(iterations, data)
-      : (iterations) => sumNapiLoop(iterations, data),
+  const runs: Record<Impl, (iterations: number) => number> = {
+    ts: (iterations) => sumTsLoop(iterations, data),
+    napi: (iterations) => sumNapiLoop(iterations, data),
+    ffi: (iterations) => sumFfiLoop(iterations, data),
   };
+  return { id: `sum_i32/${impl}/${size}`, op: "sum_i32", impl, binding: BINDINGS[impl], size, run: runs[impl] };
 }
 
 /** Builds only the selected cases, so a process allocates data for nothing else. */
@@ -74,6 +90,7 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
       id: "noop/ts",
       op: "noop",
       impl: "ts",
+      binding: BINDINGS.ts,
       size: null,
       run(iterations) {
         for (let i = 0; i < iterations; i++) tsNoop();
@@ -84,6 +101,7 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
       id: "noop/napi",
       op: "noop",
       impl: "napi",
+      binding: BINDINGS.napi,
       size: null,
       run(iterations) {
         for (let i = 0; i < iterations; i++) napiNoop();
@@ -91,9 +109,21 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
       },
     },
     {
+      id: "noop/ffi",
+      op: "noop",
+      impl: "ffi",
+      binding: BINDINGS.ffi,
+      size: null,
+      run(iterations) {
+        for (let i = 0; i < iterations; i++) ffiNoop!();
+        return iterations;
+      },
+    },
+    {
       id: "add_i32/ts",
       op: "add_i32",
       impl: "ts",
+      binding: BINDINGS.ts,
       size: null,
       run(iterations) {
         let acc = 0;
@@ -105,6 +135,7 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
       id: "add_i32/napi",
       op: "add_i32",
       impl: "napi",
+      binding: BINDINGS.napi,
       size: null,
       run(iterations) {
         let acc = 0;
@@ -112,15 +143,27 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
         return acc;
       },
     },
+    {
+      id: "add_i32/ffi",
+      op: "add_i32",
+      impl: "ffi",
+      binding: BINDINGS.ffi,
+      size: null,
+      run(iterations) {
+        let acc = 0;
+        for (let i = 0; i < iterations; i++) acc = ffiAdd!(acc, i);
+        return acc;
+      },
+    },
   ];
-  const selected = scalar.filter((c) => select(c.id));
+  const selected = scalar.filter((c) => IMPLS.includes(c.impl) && select(c.id));
   const sums = SUM_I32_SIZES.flatMap((size) =>
-    (["ts", "napi"] as const).filter((impl) => select(`sum_i32/${impl}/${size}`)).map((impl) => sumCase(impl, size))
+    IMPLS.filter((impl) => select(`sum_i32/${impl}/${size}`)).map((impl) => sumCase(impl, size))
   );
   return [...selected, ...sums];
 }
 
-/** Every case id in canonical order; selects nothing, so no data is allocated. */
+/** Every case id this runtime can run, in canonical order; selects nothing, so no data is allocated. */
 export function buildCaseIds(): string[] {
   const ids: string[] = [];
   buildCases((id) => {
@@ -131,7 +174,9 @@ export function buildCaseIds(): string[] {
 }
 
 /**
- * Confirms both implementations agree. Throws on the first mismatch.
+ * Confirms every available native path (Node-API, and FFI where the
+ * runtime has it) agrees with the TypeScript reference. Throws on the
+ * first mismatch.
  *
  * Runs after measurement: calling the functions beforehand with overflow
  * and edge-case inputs would shape the JIT's type feedback for the cases
@@ -144,18 +189,25 @@ export function checkEquivalence(): void {
     }
   };
 
+  const paths: { name: string; ops: { noop(): void; add_i32(a: number, b: number): number; sum(d: Int32Array): number } }[] = [
+    { name: "napi", ops: { noop: napiNoop, add_i32: napiAdd, sum: napiSum } },
+  ];
+  if (ffi) paths.push({ name: "ffi", ops: { noop: ffi.noop, add_i32: ffi.add_i32, sum: (d) => ffi.sum_i32(d, d.length) } });
+
   expect("ts noop", tsNoop(), undefined);
-  expect("napi noop", napiNoop(), undefined);
-
   const pairs: [number, number][] = [[0, 0], [2, 3], [-7, 3], [2147483647, 1], [-2147483648, -1]];
-  for (const [a, b] of pairs) {
-    expect(`add_i32(${a}, ${b})`, napiAdd(a, b), tsAdd(a, b));
-  }
-
-  for (const size of [0, ...SUM_I32_SIZES]) {
-    const data = makeI32Data(size);
-    expect(`sum_i32 size ${size}`, napiSum(data), tsSum(data));
-  }
+  const sizes = [0, ...SUM_I32_SIZES];
   const view = makeI32Data(64).subarray(3, 40);
-  expect("sum_i32 offset view", napiSum(view), tsSum(view));
+
+  for (const { name, ops } of paths) {
+    expect(`${name} noop`, ops.noop(), undefined);
+    for (const [a, b] of pairs) {
+      expect(`${name} add_i32(${a}, ${b})`, ops.add_i32(a, b), tsAdd(a, b));
+    }
+    for (const size of sizes) {
+      const data = makeI32Data(size);
+      expect(`${name} sum_i32 size ${size}`, ops.sum(data), tsSum(data));
+    }
+    expect(`${name} sum_i32 offset view`, ops.sum(view), tsSum(view));
+  }
 }
