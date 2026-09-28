@@ -13,6 +13,7 @@
 //   --seed N                   seed for --order shuffle (default random, recorded)
 //   --cpus LIST                pin every benchmark process with `taskset -c LIST` (Linux)
 //   --official                 official profile: both isolation modes, shuffle, >= 3 runs, --cpus required
+//   --suite LIST               only these suites: boundary, payload, return (default all)
 //   --warmup N --samples N --sample-ms N --filter TEXT   passed to bench/run.ts
 //
 // Raw output: results/raw/<run-id>/{environment,node,bun,deno}.json
@@ -25,7 +26,8 @@ import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { formatNs, table } from "../bench/common/format.ts";
+import { caseGroup, formatDataRate, formatNs, table } from "../bench/common/format.ts";
+import { parseSuites, type Suite, SUITE_NAMES } from "../bench/common/suites.ts";
 import { buildNative } from "./build.ts";
 import {
   type CaseVariance,
@@ -57,6 +59,7 @@ interface Plan {
   cpus: number[] | null;
   harness: { warmup: number; samples: number; sampleMs: number };
   filter: string | null;
+  suites: Suite[] | null;
 }
 
 interface Unit {
@@ -65,6 +68,14 @@ interface Unit {
   isolation: Isolation;
   /** null: a shared process running every selected case in canonical order. */
   caseId: string | null;
+}
+
+/** --filter / --suite arguments for bench/run.ts. */
+function selectionArgs(plan: Plan): string[] {
+  return [
+    ...(plan.filter ? ["--filter", plan.filter] : []),
+    ...(plan.suites ? ["--suite", plan.suites.join(",")] : []),
+  ];
 }
 
 function capture(cmd: string, args: string[]): string | null {
@@ -129,6 +140,7 @@ function resolvePlan(values: Record<string, string | boolean | undefined>): Plan
       sampleMs: positiveInt("sample-ms", str("sample-ms") ?? "20"),
     },
     filter: str("filter") ?? null,
+    suites: str("suite") ? parseSuites(str("suite")!) : null,
   };
 }
 
@@ -236,6 +248,7 @@ function collectEnvironment(
       pinning: plan.cpus ? { tool: capture("taskset", ["--version"]), command: ["taskset", "-c", formatCpuList(plan.cpus)] } : null,
       runtimeCommands: RUNTIME_COMMANDS,
       filter: plan.filter,
+      suites: plan.suites,
       cases: caseIds,
       casesByRuntime,
       equivalence: "checked in every process after measurement",
@@ -249,55 +262,83 @@ function collectEnvironment(
   };
 }
 
+/** The path segment of a case id: "ts", "napi", "ffi", or a strategy such as "napi.objects". */
+const pathOf = (v: CaseVariance) => v.id.split("/")[1];
+
 function printSummary(variances: CaseVariance[], runs: number, mode: string | null): void {
   const runtimes = [...new Set(variances.map((v) => v.runtime))];
-  const keys = [...new Set(variances.map((v) => `${v.op}/${v.size}`))];
-  const value = (rt: string, key: string, impl: string) =>
-    variances.find((v) => v.runtime === rt && `${v.op}/${v.size}` === key && v.impl === impl)?.median;
-
-  // Native paths each runtime measured, in canonical order (napi, then ffi where available).
-  const nativeImpls = (rt: string) =>
-    ["napi", "ffi"].filter((impl) => variances.some((v) => v.runtime === rt && v.impl === impl));
   const cell = (ns: number | undefined) => (ns === undefined ? "-" : formatNs(ns));
-
-  const rows = keys.map((key) => [
-    key.replace(/\/null$/, ""),
-    ...runtimes.flatMap((rt) => {
-      const ts = value(rt, key, "ts");
-      return [
-        cell(ts),
-        ...nativeImpls(rt).flatMap((impl) => {
-          const ns = value(rt, key, impl);
-          return [cell(ns), ts && ns ? `${(ns / ts).toFixed(2)}×` : "-"];
-        }),
-      ];
-    }),
-  ]);
   const title = runs > 1 ? `median ns/op (median of ${runs} runs)` : "median ns/op";
-  const header = [
-    title,
-    ...runtimes.flatMap((rt) => [`${rt} ts`, ...nativeImpls(rt).flatMap((impl) => [`${rt} ${impl}`, `${impl}/ts`])]),
-  ];
-  if (mode) console.log(`\n${mode}:`);
-  console.log(`\n${table(header, rows)}`);
 
-  for (const rt of runtimes) {
-    for (const impl of nativeImpls(rt)) {
-      const sizes = variances.filter((v) => v.runtime === rt && v.op === "sum_i32" && v.impl === "ts").map((v) => v.size!)
-        .filter((size) => value(rt, `sum_i32/${size}`, impl) !== undefined);
-      if (!sizes.length) continue;
-      // Smallest size from which the native path stays faster for every larger measured size.
-      let breakEven: number | null = null;
-      for (const size of [...sizes].sort((a, b) => b - a)) {
-        const ts = value(rt, `sum_i32/${size}`, "ts");
-        const ns = value(rt, `sum_i32/${size}`, impl);
-        if (ts === undefined || ns === undefined || ns >= ts) break;
-        breakEven = size;
-      }
-      console.log(
-        `${rt}: sum_i32 ${impl} faster than ts ${breakEven === null ? "at no measured size" : `from size ${breakEven}`}`,
-      );
+  if (mode) console.log(`\n${mode}:`);
+  for (const suite of SUITE_NAMES) {
+    const inSuite = variances.filter((v) => v.suite === suite);
+    if (!inSuite.length) continue;
+    console.log(`\n== ${suite} suite ==`);
+
+    for (const rt of runtimes) {
+      const mine = inSuite.filter((v) => v.runtime === rt);
+      if (!mine.length) continue;
+      const paths = [...new Set(mine.map(pathOf))].sort((a, b) => Number(b === "ts") - Number(a === "ts"));
+      const natives = paths.filter((path) => path !== "ts");
+      const hasTs = paths.includes("ts");
+      const find = (group: string, path: string) => mine.find((v) => pathOf(v) === path && caseGroup(v.id) === group);
+      const groups = [...new Set(mine.map((v) => caseGroup(v.id)))];
+      const rows = groups.map((group) => {
+        const ts = find(group, "ts")?.median;
+        return [
+          group,
+          ...paths.map((path) => cell(find(group, path)?.median)),
+          ...(hasTs
+            ? natives.map((path) => {
+              const ns = find(group, path)?.median;
+              return ts && ns ? `${(ns / ts).toFixed(2)}×` : "-";
+            })
+            : []),
+          ...paths.map((path) => {
+            const v = find(group, path);
+            return v ? formatDataRate(v.op, v.payload, v.median) : "-";
+          }),
+        ];
+      });
+      const header = [
+        `${rt}: ${title}`,
+        ...paths,
+        ...(hasTs ? natives.map((path) => `${path}/ts`) : []),
+        ...paths.map((path) => `${path} rate`),
+      ];
+      console.log(`\n${table(header, rows)}`);
     }
+
+    // Break-even per sized operation: the smallest measured size from which a
+    // native path is faster than ts at that size and every larger one.
+    const sized = inSuite.filter((v) => v.size !== null);
+    const familyOf = (v: CaseVariance) => caseGroup(v.id).split("/").slice(0, -1).join("/");
+    const families = [...new Set(sized.map(familyOf))].filter((f) =>
+      sized.some((v) => familyOf(v) === f && pathOf(v) === "ts")
+    );
+    if (!families.length) continue;
+    const breakEven = (rt: string, path: string, family: string): string => {
+      const median = (p: string, size: number) =>
+        sized.find((v) => v.runtime === rt && pathOf(v) === p && familyOf(v) === family && v.size === size)?.median;
+      const sizes = [...new Set(sized.filter((v) => v.runtime === rt && familyOf(v) === family).map((v) => v.size!))]
+        .sort((a, b) => b - a);
+      if (!sizes.some((size) => median("ts", size) !== undefined && median(path, size) !== undefined)) return "-";
+      let from: number | null = null;
+      for (const size of sizes) {
+        const ts = median("ts", size);
+        const ns = median(path, size);
+        if (ts === undefined || ns === undefined || ns >= ts) break;
+        from = size;
+      }
+      return from === null ? "never" : `from ${from}`;
+    };
+    const rows = runtimes.flatMap((rt) =>
+      [...new Set(sized.filter((v) => v.runtime === rt).map(pathOf))].filter((path) => path !== "ts")
+        .map((path) => [`${rt} ${path}`, ...families.map((f) => breakEven(rt, path, f))])
+    );
+    console.log(`\nbreak-even vs ts (size: elements for sum_i32, rows for return_rows, bytes otherwise):`);
+    console.log(table(["path", ...families], rows));
   }
 }
 
@@ -322,6 +363,7 @@ function main(): void {
       samples: { type: "string" },
       "sample-ms": { type: "string" },
       filter: { type: "string" },
+      suite: { type: "string" },
     },
   });
   const plan = resolvePlan(values);
@@ -350,13 +392,13 @@ function main(): void {
   const casesByRuntime: Record<string, string[]> = {};
   for (const rt of available) {
     const [cmd, ...args] = RUNTIME_COMMANDS[rt];
-    const listed = capture(cmd, [...args, "--list", ...(plan.filter ? ["--filter", plan.filter] : [])]);
+    const listed = capture(cmd, [...args, "--list", ...selectionArgs(plan)]);
     if (listed === null) throw new Error(`${rt} failed to list its cases`);
     casesByRuntime[rt] = listed.split("\n").filter(Boolean);
-    if (!casesByRuntime[rt].length) console.error(`skipping ${rt}: no case matches --filter ${plan.filter}`);
+    if (!casesByRuntime[rt].length) console.error(`skipping ${rt}: no case matches the selection`);
   }
   const runtimes = available.filter((rt) => casesByRuntime[rt].length);
-  if (!runtimes.length) throw new Error(`no case matches --filter ${plan.filter}`);
+  if (!runtimes.length) throw new Error("no case matches the selection (--filter / --suite)");
   const caseIds = mergeCaseOrder(runtimes.map((rt) => casesByRuntime[rt]));
 
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
@@ -386,7 +428,7 @@ function main(): void {
   units.forEach((unit, index) => {
     const sequence = index + 1;
     const tmp = join(outDir, `.unit-${sequence}.json`);
-    const selection = unit.caseId ? ["--case", unit.caseId] : plan.filter ? ["--filter", plan.filter] : [];
+    const selection = unit.caseId ? ["--case", unit.caseId] : selectionArgs(plan);
     const argv = [...pinPrefix, ...RUNTIME_COMMANDS[unit.runtime], ...harnessArgs, ...selection, "--out", tmp];
     const child = spawnSync(argv[0], argv.slice(1), { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     const mode = plan.isolation === "both" ? ` ${unit.isolation.padEnd(7)}` : "";

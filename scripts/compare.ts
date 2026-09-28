@@ -13,6 +13,7 @@ import { basename, join } from "node:path";
 import process from "node:process";
 import { formatNs, table } from "../bench/common/format.ts";
 import type { CaseResult } from "../bench/common/harness.ts";
+import { type Suite, suiteOf } from "../bench/common/suites.ts";
 
 export interface StoredResult extends CaseResult {
   /** Repetition number (1-based); absent in schema 1 files. */
@@ -41,6 +42,10 @@ export interface CaseVariance {
   op: string;
   impl: string;
   size: number | null;
+  /** What crosses the boundary per call (bytes or record count); null for scalar cases and pre-M3 results. */
+  payload: { bytes?: number; count?: number } | null;
+  /** "boundary", "payload" or "return"; derived from the operation for results recorded before suites. */
+  suite: Suite;
   runMedians: { source: string; run: number; median: number }[];
   median: number;
   min: number;
@@ -101,6 +106,8 @@ export function caseVariance(runSets: RunSet[], caseOrder: string[] = []): CaseV
         op: r.op,
         impl: r.impl,
         size: r.size,
+        payload: r.payload ?? null,
+        suite: r.suite ?? suiteOf(r.op),
         runMedians: [],
         median: 0,
         min: 0,
@@ -229,6 +236,7 @@ function comparableSettings(env: Json): Record<string, string> {
     "rustc": env.rust?.rustc ?? "n/a",
     "isolation": m.isolation ?? "runtime (schema 1)",
     "cpus": m.cpus ?? "unpinned",
+    "suites": m.suites ? m.suites.join(",") : "all",
     "napi sha256": env.native?.napi?.sha256?.slice(0, 12) ?? "n/a",
     "ffi sha256": env.native?.ffi?.sha256?.slice(0, 12) ?? "n/a",
     "warmup/samples/sample-ms": `${env.options?.warmup}/${env.options?.samples}/${env.options?.sampleMs}`,
