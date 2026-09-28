@@ -25,6 +25,8 @@ export interface CaseResult {
   id: string;
   op: string;
   impl: string;
+  /** "none", "node-api", "bun:ffi" or "Deno.dlopen"; absent in results recorded before FFI paths existed. */
+  binding?: string;
   size: number | null;
   iterations: number;
   /** Raw elapsed time of each warmup batch, in ns. Not used for stats. */
@@ -85,6 +87,7 @@ export function measure(c: Case, options: Options): CaseResult {
     id: c.id,
     op: c.op,
     impl: c.impl,
+    binding: c.binding,
     size: c.size,
     iterations,
     warmup_ns,

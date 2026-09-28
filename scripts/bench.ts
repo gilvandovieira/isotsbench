@@ -159,7 +159,7 @@ function shuffle<T>(items: T[], random: () => number): T[] {
  * units of each repetition keeps slow drifts (thermals, background load)
  * from always landing on the same runtime, case or mode.
  */
-function schedule(plan: Plan, runtimes: string[], caseIds: string[]): Unit[] {
+function schedule(plan: Plan, runtimes: string[], casesByRuntime: Record<string, string[]>): Unit[] {
   const random = mulberry32(plan.seed);
   const modes: Isolation[] = plan.isolation === "both" ? ["case", "runtime"] : [plan.isolation];
   const units: Unit[] = [];
@@ -167,7 +167,7 @@ function schedule(plan: Plan, runtimes: string[], caseIds: string[]): Unit[] {
     const base = runtimes.flatMap((runtime) =>
       modes.flatMap((isolation): Unit[] =>
         isolation === "case"
-          ? caseIds.map((caseId) => ({ run, runtime, isolation, caseId }))
+          ? casesByRuntime[runtime].map((caseId) => ({ run, runtime, isolation, caseId }))
           : [{ run, runtime, isolation, caseId: null }]
       )
     );
@@ -176,7 +176,28 @@ function schedule(plan: Plan, runtimes: string[], caseIds: string[]): Unit[] {
   return units;
 }
 
-function collectEnvironment(runId: string, plan: Plan, runtimes: Record<string, string | null>, caseIds: string[]) {
+/** Merges per-runtime case lists into one order, keeping each list's relative order. */
+function mergeCaseOrder(lists: string[][]): string[] {
+  const out: string[] = [];
+  for (const list of lists) {
+    let at = 0;
+    for (const id of list) {
+      const i = out.indexOf(id);
+      if (i === -1) out.splice(at++, 0, id);
+      else at = i + 1;
+    }
+  }
+  return out;
+}
+
+function collectEnvironment(
+  runId: string,
+  plan: Plan,
+  runtimes: Record<string, string | null>,
+  caseIds: string[],
+  casesByRuntime: Record<string, string[]>,
+  native: ReturnType<typeof buildNative>,
+) {
   const rustc = capture("rustc", ["-vV"]) ?? "";
   const rustcField = (key: string) => rustc.match(new RegExp(`^${key}: (.*)$`, "m"))?.[1] ?? null;
   const cpus = os.cpus();
@@ -200,6 +221,7 @@ function collectEnvironment(runId: string, plan: Plan, runtimes: Record<string, 
       profile: "release",
       rustflags: process.env.RUSTFLAGS ?? null,
     },
+    native,
     git: {
       commit: capture("git", ["rev-parse", "HEAD"]),
       dirty: capture("git", ["status", "--porcelain"]) !== "",
@@ -215,6 +237,7 @@ function collectEnvironment(runId: string, plan: Plan, runtimes: Record<string, 
       runtimeCommands: RUNTIME_COMMANDS,
       filter: plan.filter,
       cases: caseIds,
+      casesByRuntime,
       equivalence: "checked in every process after measurement",
     },
     options: plan.harness,
@@ -232,36 +255,49 @@ function printSummary(variances: CaseVariance[], runs: number, mode: string | nu
   const value = (rt: string, key: string, impl: string) =>
     variances.find((v) => v.runtime === rt && `${v.op}/${v.size}` === key && v.impl === impl)?.median;
 
+  // Native paths each runtime measured, in canonical order (napi, then ffi where available).
+  const nativeImpls = (rt: string) =>
+    ["napi", "ffi"].filter((impl) => variances.some((v) => v.runtime === rt && v.impl === impl));
+  const cell = (ns: number | undefined) => (ns === undefined ? "-" : formatNs(ns));
+
   const rows = keys.map((key) => [
     key.replace(/\/null$/, ""),
     ...runtimes.flatMap((rt) => {
       const ts = value(rt, key, "ts");
-      const napi = value(rt, key, "napi");
       return [
-        ts === undefined ? "-" : formatNs(ts),
-        napi === undefined ? "-" : formatNs(napi),
-        ts && napi ? `${(napi / ts).toFixed(2)}×` : "-",
+        cell(ts),
+        ...nativeImpls(rt).flatMap((impl) => {
+          const ns = value(rt, key, impl);
+          return [cell(ns), ts && ns ? `${(ns / ts).toFixed(2)}×` : "-"];
+        }),
       ];
     }),
   ]);
   const title = runs > 1 ? `median ns/op (median of ${runs} runs)` : "median ns/op";
-  const header = [title, ...runtimes.flatMap((rt) => [`${rt} ts`, `${rt} napi`, "napi/ts"])];
+  const header = [
+    title,
+    ...runtimes.flatMap((rt) => [`${rt} ts`, ...nativeImpls(rt).flatMap((impl) => [`${rt} ${impl}`, `${impl}/ts`])]),
+  ];
   if (mode) console.log(`\n${mode}:`);
   console.log(`\n${table(header, rows)}`);
 
   for (const rt of runtimes) {
-    const sizes = variances.filter((v) => v.runtime === rt && v.op === "sum_i32" && v.impl === "ts").map((v) => v.size!)
-      .filter((size) => value(rt, `sum_i32/${size}`, "napi") !== undefined);
-    if (!sizes.length) continue;
-    // Smallest size from which napi stays faster for every larger measured size.
-    let breakEven: number | null = null;
-    for (const size of [...sizes].sort((a, b) => b - a)) {
-      const ts = value(rt, `sum_i32/${size}`, "ts");
-      const napi = value(rt, `sum_i32/${size}`, "napi");
-      if (ts === undefined || napi === undefined || napi >= ts) break;
-      breakEven = size;
+    for (const impl of nativeImpls(rt)) {
+      const sizes = variances.filter((v) => v.runtime === rt && v.op === "sum_i32" && v.impl === "ts").map((v) => v.size!)
+        .filter((size) => value(rt, `sum_i32/${size}`, impl) !== undefined);
+      if (!sizes.length) continue;
+      // Smallest size from which the native path stays faster for every larger measured size.
+      let breakEven: number | null = null;
+      for (const size of [...sizes].sort((a, b) => b - a)) {
+        const ts = value(rt, `sum_i32/${size}`, "ts");
+        const ns = value(rt, `sum_i32/${size}`, impl);
+        if (ts === undefined || ns === undefined || ns >= ts) break;
+        breakEven = size;
+      }
+      console.log(
+        `${rt}: sum_i32 ${impl} faster than ts ${breakEven === null ? "at no measured size" : `from size ${breakEven}`}`,
+      );
     }
-    console.log(`${rt}: sum_i32 napi faster than ts ${breakEven === null ? "at no measured size" : `from size ${breakEven}`}`);
   }
 }
 
@@ -300,29 +336,38 @@ function main(): void {
     if (offline.length) throw new Error(`--cpus includes CPUs that are not online: ${formatCpuList(offline)}`);
   }
 
-  buildNative();
+  const native = buildNative();
 
   const versions: Record<string, string | null> = {};
   for (const rt of requested) {
     versions[rt] = capture(RUNTIME_COMMANDS[rt][0], ["--version"])?.split("\n")[0] ?? null;
     if (versions[rt] === null) console.error(`skipping ${rt}: not found on PATH`);
   }
-  const runtimes = requested.filter((rt) => versions[rt] !== null);
-  if (!runtimes.length) throw new Error("no requested runtime is available");
+  const available = requested.filter((rt) => versions[rt] !== null);
+  if (!available.length) throw new Error("no requested runtime is available");
 
-  const listArgs = [...RUNTIME_COMMANDS.node.slice(1), "--list", ...(plan.filter ? ["--filter", plan.filter] : [])];
-  const caseIds = (capture("node", listArgs) ?? "").split("\n").filter(Boolean);
-  if (!caseIds.length) throw new Error(`no case matches --filter ${plan.filter}`);
+  // Each runtime lists the cases it supports (Node.js has no FFI path).
+  const casesByRuntime: Record<string, string[]> = {};
+  for (const rt of available) {
+    const [cmd, ...args] = RUNTIME_COMMANDS[rt];
+    const listed = capture(cmd, [...args, "--list", ...(plan.filter ? ["--filter", plan.filter] : [])]);
+    if (listed === null) throw new Error(`${rt} failed to list its cases`);
+    casesByRuntime[rt] = listed.split("\n").filter(Boolean);
+    if (!casesByRuntime[rt].length) console.error(`skipping ${rt}: no case matches --filter ${plan.filter}`);
+  }
+  const runtimes = available.filter((rt) => casesByRuntime[rt].length);
+  if (!runtimes.length) throw new Error(`no case matches --filter ${plan.filter}`);
+  const caseIds = mergeCaseOrder(runtimes.map((rt) => casesByRuntime[rt]));
 
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = join(ROOT, "results", "raw", runId);
   mkdirSync(outDir, { recursive: true });
-  const environment = collectEnvironment(runId, plan, versions, caseIds);
+  const environment = collectEnvironment(runId, plan, versions, caseIds, casesByRuntime, native);
   const writeEnvironment = () =>
     writeFileSync(join(outDir, "environment.json"), JSON.stringify(environment, null, 2) + "\n");
   writeEnvironment();
 
-  const units = schedule(plan, runtimes, caseIds);
+  const units = schedule(plan, runtimes, casesByRuntime);
   console.error(
     `\n${plan.profile} run ${runId}: ${units.length} processes, isolation ${plan.isolation}, ${plan.runs} run(s), ` +
       `order ${plan.order} (seed ${plan.seed}), cpus ${plan.cpus ? formatCpuList(plan.cpus) : "unpinned"}`,
