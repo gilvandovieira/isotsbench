@@ -14,10 +14,17 @@ Rather than assuming native code is automatically faster, `isotsbench` measures 
 
 ## Status and Usage
 
-Implemented so far:
+Implemented so far, in three suites that can be run separately (`--suite`, or `SUITE=` with make):
 
-- operations: `noop()`, `add_i32(a, b)`, `sum_i32(Int32Array)`
-- paths, all calling the same Rust core:
+- **boundary:** `noop()`, `add_i32(a, b)`, `sum_i32(Int32Array)`
+- **payload** (ingress, JS → native): `string_len(string)` with ASCII and mixed-UTF-8 variants, `bytes_len(Uint8Array)` and `checksum_bytes(Uint8Array)` (FNV-1a), each at 16 B … 16 MiB
+- **return** (egress, native → JS):
+  - `return_f64()`
+  - `return_string(bytes)`, ASCII and UTF-8, 16 B … 64 KiB
+  - `return_bytes(bytes)`, a new `Uint8Array`, 16 B … 16 MiB
+  - `return_rows(count)`, arrays of `{ id, score, active, name }`, 1 … 10k rows
+
+The paths below all call the same Rust core:
 
 | Path | Node.js | Bun | Deno |
 | --- | --- | --- | --- |
@@ -25,7 +32,27 @@ Implemented so far:
 | Node-API → Rust (`napi`); the same `.node` file everywhere | ✓ | ✓ | ✓ |
 | runtime FFI → C ABI → Rust (`ffi`), via `bun:ffi` / `Deno.dlopen` | none (no stable FFI) | ✓ | ✓ |
 
-Every result records its path (`impl`) and binding mechanism (`binding`). The FFI `sum_i32` receives the typed array as a borrowed pointer plus an explicit length; see [docs/methodology.md](docs/methodology.md#native-libraries).
+Every result records:
+
+- its `suite`, path (`impl`) and binding mechanism (`binding`)
+- for payload and return cases, the payload kind and size (`payload`, `variant`)
+- for return cases, the result's `ownership` strategy
+
+How data crosses each boundary:
+
+| Data | `napi` | `ffi` |
+| --- | --- | --- |
+| typed arrays in | borrowed (no copy) | borrowed pointer plus explicit `uint32_t` length (no copy) |
+| strings in | transcoded to UTF-8 by the engine and copied into the addon's reused buffer (no per-call native allocation) | transcoded to UTF-8 in JS with `TextEncoder.encodeInto` into a reused buffer, then borrowed |
+| strings out | Rust fills a reused native buffer; `napi_create_string_utf8` copies it into a new JS string | Rust fills a reused JS buffer; `TextDecoder` copies it into a new JS string |
+| bytes out | new JS-owned `ArrayBuffer` (`napi_create_arraybuffer`), filled in place by Rust | new JS `Uint8Array`, filled in place by Rust |
+| rows out | `napi.objects`: objects built through Node-API; `napi.packed`: packed records decoded in JS | `ffi.packed` only: a C ABI cannot create JS objects |
+
+- Nothing returned to JS ever points at native memory, so no returned value can outlive it.
+- Both string paths produce identical UTF-8, with lone surrogates as U+FFFD.
+- Rows are measured under named strategies, not as one equivalent operation.
+
+Details and evidence are in [docs/methodology.md](docs/methodology.md#how-data-crosses-each-boundary) and [Return path](docs/methodology.md#return-path-native--js).
 
 WASM, browser, scriptc, async, SQLite, normalised datasets and charts are not implemented yet.
 
@@ -43,6 +70,7 @@ No npm packages or crates are required.
 make bench                        # build, fresh process per case, shuffled, 1 run, unpinned
 make bench-quick                  # smoke run: one process per runtime, short batches (numbers not meaningful)
 make bench-official CPUS=8,10     # official profile: pinned via taskset, fresh and shared processes, shuffled, 3 runs (Linux)
+make bench-official CPUS=8,10 SUITE=return   # the same, for one suite only (SUITE works on every bench target)
 make compare RUNS="results/raw/<a> results/raw/<b>"   # run-to-run variance across runs/directories
 make build                        # cargo build --release; copies the Node-API addon and the C ABI library to build/
 make test                         # Rust unit tests
@@ -54,7 +82,7 @@ The same commands work without `make`:
 ```bash
 node scripts/bench.ts [--runtimes node,bun,deno] [--isolation case|runtime|both] [--runs N] \
   [--order shuffle|fixed] [--seed N] [--cpus LIST] [--official] \
-  [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32]
+  [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32] [--suite boundary,payload,return]
 node scripts/compare.ts results/raw/<run-id> [results/raw/<run-id> ...]
 ```
 
@@ -62,7 +90,9 @@ To run a single runtime by hand (after `make build`):
 
 ```bash
 node bench/run.ts --list                      # case ids this runtime supports
+node bench/run.ts --list --suite return       # only the return-path cases
 bun  bench/run.ts --filter /ffi               # only the FFI path
+deno run --allow-read --allow-write --allow-ffi bench/run.ts --filter string_len
 node bench/run.ts --case sum_i32/napi/1000 --out node.json
 bun  bench/run.ts --filter noop
 deno run --allow-read --allow-write --allow-ffi bench/run.ts --out deno.json
@@ -86,7 +116,7 @@ native/rust-core/   Rust implementations; no binding code
 native/napi/        raw Node-API binding (cdylib) over rust-core
 native/ffi/         plain C ABI (cdylib) over rust-core, for bun:ffi and Deno.dlopen
 bench/run.ts        entry point executed by each runtime
-bench/common/       shared cases, TS reference implementations, harness, Node-API and FFI loaders
+bench/common/       shared cases, suites, TS reference implementations, payloads, rows, harness, Node-API and FFI loaders
 scripts/            build, orchestration, system probing, run comparison
 results/raw/        raw run output (git-ignored)
 docs/               methodology
