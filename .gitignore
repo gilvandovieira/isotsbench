@@ -1,0 +1,4 @@
+/target/
+/build/
+/results/raw/*
+!/results/raw/.gitkeep
