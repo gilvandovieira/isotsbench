@@ -4,21 +4,75 @@ This describes what the harness does today. The README describes where the proje
 
 ## Scope
 
-| Operation      | Implementations        | Sizes                                   |
-| -------------- | ---------------------- | --------------------------------------- |
-| `noop()`       | pure TS, Node-API/Rust | n/a                                     |
-| `add_i32(a,b)` | pure TS, Node-API/Rust | n/a                                     |
-| `sum_i32(arr)` | pure TS, Node-API/Rust | 1, 10, 100, 1k, 10k, 100k, 1M elements  |
+| Operation      | Sizes                                   |
+| -------------- | --------------------------------------- |
+| `noop()`       | n/a                                     |
+| `add_i32(a,b)` | n/a                                     |
+| `sum_i32(arr)` | 1, 10, 100, 1k, 10k, 100k, 1M elements  |
 
-Runtimes: Node.js, Bun, Deno. All synchronous. There are no WASM, FFI, browser, scriptc, async or SQLite paths yet.
+Every operation runs through each path its runtime supports:
 
-## One addon, three runtimes
+| Path (`impl`) | Node.js | Bun | Deno | `binding` recorded |
+| --- | --- | --- | --- | --- |
+| `ts`: pure TypeScript | yes | yes | yes | `none` |
+| `napi`: Node-API → Rust | yes | yes | yes | `node-api` |
+| `ffi`: runtime FFI → C ABI → Rust | no | yes | yes | `bun:ffi` / `Deno.dlopen` |
 
-`native/napi` is a single `cdylib` written against the raw Node-API C ABI. It does not use napi-rs, so the numbers reflect Node-API itself and not the overhead of a binding framework. It calls into `native/rust-core`, which has no knowledge of Node-API.
+Node.js has no stable FFI, so it has no `ffi` path.
 
-Every runtime loads the **same `build/isotsbench_napi.node` file** the same way: `createRequire(import.meta.url)(path)`. Deno runs with `--allow-read --allow-write --allow-ffi`; the benchmark code has no runtime-specific branches.
+All calls are synchronous. There are no WASM, browser, scriptc, async or SQLite paths yet.
+
+Case ids are `op/impl[/size]` (for example `sum_i32/ffi/1000`). Every result also records `binding`, the mechanism that crossed into native code. Results recorded before FFI existed have no `binding` field; their paths were `ts` and `napi`.
+
+## Native libraries
+
+Both libraries call the same `native/rust-core`, which knows nothing about bindings. Neither contains benchmark logic.
+
+### Node-API: `native/napi`
+
+A single `cdylib` written against the raw Node-API C ABI. It does not use napi-rs, so the numbers reflect Node-API itself and not the overhead of a binding framework.
+
+Every runtime loads the **same `build/isotsbench_napi.node` file** the same way: `createRequire(import.meta.url)(path)`. Deno runs with `--allow-read --allow-write --allow-ffi`.
 
 `sum_i32` borrows the `Int32Array` backing store via `napi_get_typedarray_info`. It does not copy.
+
+### C ABI: `native/ffi`
+
+A `cdylib` exporting plain C functions:
+
+```c
+void    isotsbench_noop(void);
+int32_t isotsbench_add_i32(int32_t a, int32_t b);
+int32_t isotsbench_sum_i32(const int32_t *data, uint32_t len);
+```
+
+Bun loads it with `bun:ffi` `dlopen`, and Deno with `Deno.dlopen`, both with stable APIs and no extra flags. Deno uses the `--allow-ffi` flag it already had. `bench/common/ffi.ts` declares the same signatures for both:
+
+| C parameter | Bun type | Deno type |
+| --- | --- | --- |
+| `int32_t` | `i32` | `i32` |
+| `const int32_t *` | `ptr` | `buffer` |
+| `uint32_t` | `u32` | `u32` |
+| return `int32_t` / `void` | `i32` / `void` | `i32` / `void` |
+
+**How `sum_i32` differs from Node-API.** A C function cannot inspect a JavaScript typed array. So the FFI case calls `sum_i32(data, data.length)`:
+
+- Both runtimes pass a pointer to the view's own start, `byteOffset` included, without copying. The offset-view equivalence check confirms this.
+- The length crosses the boundary as a second argument.
+
+The algorithm, data layout and wrapping semantics are identical to the other paths. The extra argument is the inherent cost of the C calling convention, not a different benchmark. For an empty array a runtime may pass a null pointer; the C ABI accepts null only when the length is 0.
+
+**Why the length is `uint32_t`, not `size_t`.** With a 64-bit `size_t` length, no single call form is fast in both runtimes. Measured per call on the 1-element sum, pinned to CPUs 8,10, using a throwaway library with both signatures:
+
+| Length argument | Deno | Bun |
+| --- | --- | --- |
+| `usize`, JS number | 80.4 ns (slow conversion path) | 4.9 ns |
+| `usize`, `BigInt(length)` per call | 12.3 ns | 13.6 ns (BigInt allocation) |
+| `u32`, JS number | 12.4 ns | 4.5 ns |
+
+With `size_t`, whichever JS type the length is passed as would cost one runtime 8–70 ns per call. At small sizes, that is more than the work being measured. `uint32_t` takes the same JS call code, a plain number, and stays on the fast path in both runtimes. The cost is a limit of 2^32 − 1 elements per call. A caller must not pass more, because the runtime would truncate the length. The benchmark's largest array has 10^6 elements.
+
+The first FFI run used `size_t`, and Deno's `sum_i32/ffi/1` measured 73 ns against 2.5 ns for `noop/ffi`. That gap is what exposed the conversion cost.
 
 ## Shared TypeScript
 
@@ -34,7 +88,7 @@ For each case, in `bench/common/harness.ts`:
 
 ns/op = batch ns / iterations. The reported statistics (median, mean, sample stddev, min, max) are computed over the per-sample ns/op values. ops/s = 1e9 / median ns/op. p95/p99 are not reported: with 30 batched samples they would not be meaningful.
 
-- **Correctness is checked after measurement.** Once timing is done, `checkEquivalence()` checks that TS and native return identical results: i32 overflow, empty arrays, every benchmark size and an offset subarray view. A mismatch fails the process, and the orchestrator records the unit as failed. The check runs *after* timing on purpose. Calling the functions first with overflowing and edge-case inputs would shape the JIT's type feedback for the code about to be measured.
+- **Correctness is checked after measurement.** Once timing is done, `checkEquivalence()` checks that every native path the runtime has (Node-API, plus FFI in Bun and Deno) returns exactly what the TypeScript reference returns: `noop` returns `undefined`, i32 overflow, empty arrays, every benchmark size and an offset subarray view. A mismatch fails the process, and the orchestrator records the unit as failed and discards its results, so a failed check means results are never accepted. This was tested by deliberately breaking the C ABI's `sum_i32` by one: every Bun and Deno FFI unit failed and the run exited 1. The check runs *after* timing on purpose. Calling the functions first with overflowing and edge-case inputs would shape the JIT's type feedback for the code about to be measured.
 - **Monomorphic loops.** Each case owns its loop and calls one hoisted function reference. A shared generic loop that took callbacks would turn polymorphic and penalise whichever case ran later.
 - **No dead code.** Each loop folds call results into its return value, and that value is stored in a module-level sink.
 - **Only the selected case is built.** A process allocates benchmark data only for the cases it runs.
@@ -131,13 +185,14 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
 - `environment.json`
   - hardware and OS, plus `system` (above) and load averages
   - runtime, rustc and cargo versions, `RUSTFLAGS`, git commit and dirty flag
-  - `methodology`: profile, isolation (`case`, `runtime` or `both`), runs, order, seed, CPUs and the exact `taskset` command and version, the runtime command lines, filter, canonical case list, and when equivalence is checked
+  - `methodology`: profile, isolation (`case`, `runtime` or `both`), runs, order, seed, CPUs and the exact `taskset` command and version, the runtime command lines, filter, canonical case list, `casesByRuntime` (Node.js lists no `ffi` cases), and when equivalence is checked
   - `options`: warmup, samples, sample-ms
   - `conditions`: warnings and `officialCriteriaMet`
   - `failedUnits`
+  - `native`: path and SHA-256 of the Node-API addon and the C ABI library that were measured
 - `<runtime>.json` (schema 2)
   - `process.versions` as the runtime reports it, the timer and options
-  - one entry per case per run: `run`, `isolation`, `sequence`, `process` (pid, affinity, allowed CPU count, execArgv, start/end time), `iterations`, raw `warmup_ns` and `samples_ns`, derived `ns_per_op` statistics and `ops_per_s`
+  - one entry per case per run: `impl`, `binding`, `run`, `isolation`, `sequence`, `process` (pid, affinity, allowed CPU count, execArgv, start/end time), `iterations`, raw `warmup_ns` and `samples_ns`, derived `ns_per_op` statistics and `ops_per_s`
 
 Raw sample arrays are copied unchanged from each process's output into these files.
 
@@ -212,7 +267,19 @@ Neither number is the single right answer. Run A is how a fresh process behaves;
 
 The Bun rows were slower and noisier in fresh processes. Every other case agreed between the modes.
 
-Results are therefore only comparable when the harness options are identical. `scripts/compare.ts` lists warmup, samples and sample-ms among the settings that differ between directories.
+Results are therefore only comparable when the harness options are identical.
+
+**FFI paths.** One official-profile run was made with the `uint32_t` ABI: CPUs 8,10, 3 runs, both modes, 225 processes, no failed units, and `powersave` and turbo still on, so it is not an official result. Median ns/op, fresh process per case:
+
+| Case | Bun napi | Bun ffi | Deno napi | Deno ffi |
+| --- | --- | --- | --- | --- |
+| `noop` | 37.3 | 1.12 | 7.45 | 2.58 |
+| `add_i32` | 44.7 | 1.12 | 30.8 | 2.37 |
+| `sum_i32/1` | 67.5 | 2.64 | 41.3 | 10.1 |
+| `sum_i32/1000000` | 60,430 | 60,070 | 61,850 | 60,340 |
+
+- At 10^6 elements every native path converges on about 60 µs. At that size the boundary cost no longer matters.
+- The FFI paths agreed between the two isolation modes, except Deno `noop/ffi` (2.58 vs 2.36 ns, flagged as divergent). `scripts/compare.ts` lists warmup, samples and sample-ms among the settings that differ between directories.
 
 ## Known limitations
 
@@ -222,5 +289,5 @@ Results are therefore only comparable when the harness options are identical. `s
 - **Deno's affinity is checked by count only**, because of its permission model (see above).
 - **A fixed warmup count doesn't guarantee a steady state.** Run-to-run comparison detects a failure to reach steady state; it doesn't prevent one.
 - **No statistical test yet.** The 5% threshold is a heuristic. There are no confidence intervals or tests of whether one run differs from another.
-- **Platforms.** Only Linux x86_64 has been verified. `native/napi/build.rs` includes the usual macOS `dynamic_lookup` link flags, but they are untested. Windows would need linking against `node.lib` and is unsupported. Topology, condition checks and pinning are Linux-only.
+- **Platforms.** Only Linux x86_64 has been verified. `native/napi/build.rs` includes the usual macOS `dynamic_lookup` link flags, but they are untested. The FFI library name follows platform conventions (`.dylib` on macOS, `.dll` on Windows), but only `.so` has been tested. Windows would need linking against `node.lib` and is unsupported. Topology, condition checks and pinning are Linux-only.
 - There are no normalised JSON/CSV datasets, charts, or regression checks yet.

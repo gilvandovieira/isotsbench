@@ -14,13 +14,20 @@ Rather than assuming native code is automatically faster, `isotsbench` measures 
 
 ## Status and Usage
 
-**Milestone 1** implements the smallest slice of the plan below:
+Implemented so far:
 
 - operations: `noop()`, `add_i32(a, b)`, `sum_i32(Int32Array)`
-- implementations: pure TypeScript and Rust through Node-API
-- runtimes: Node.js, Bun, Deno. All three load the same `.node` addon and run the same benchmark code.
+- paths, all calling the same Rust core:
 
-WASM, runtime-specific FFI, browser, scriptc, async, SQLite, normalised datasets and charts are not implemented yet.
+| Path | Node.js | Bun | Deno |
+| --- | --- | --- | --- |
+| pure TypeScript (`ts`) | ✓ | ✓ | ✓ |
+| Node-API → Rust (`napi`); the same `.node` file everywhere | ✓ | ✓ | ✓ |
+| runtime FFI → C ABI → Rust (`ffi`), via `bun:ffi` / `Deno.dlopen` | none (no stable FFI) | ✓ | ✓ |
+
+Every result records its path (`impl`) and binding mechanism (`binding`). The FFI `sum_i32` receives the typed array as a borrowed pointer plus an explicit length; see [docs/methodology.md](docs/methodology.md#native-libraries).
+
+WASM, browser, scriptc, async, SQLite, normalised datasets and charts are not implemented yet.
 
 ### Requirements
 
@@ -37,7 +44,7 @@ make bench                        # build, fresh process per case, shuffled, 1 r
 make bench-quick                  # smoke run: one process per runtime, short batches (numbers not meaningful)
 make bench-official CPUS=8,10     # official profile: pinned via taskset, fresh and shared processes, shuffled, 3 runs (Linux)
 make compare RUNS="results/raw/<a> results/raw/<b>"   # run-to-run variance across runs/directories
-make build                        # cargo build --release + copy addon to build/isotsbench_napi.node
+make build                        # cargo build --release; copies the Node-API addon and the C ABI library to build/
 make test                         # Rust unit tests
 make check                        # clippy + deno type check of the TypeScript
 ```
@@ -54,7 +61,8 @@ node scripts/compare.ts results/raw/<run-id> [results/raw/<run-id> ...]
 To run a single runtime by hand (after `make build`):
 
 ```bash
-node bench/run.ts --list                      # case ids
+node bench/run.ts --list                      # case ids this runtime supports
+bun  bench/run.ts --filter /ffi               # only the FFI path
 node bench/run.ts --case sum_i32/napi/1000 --out node.json
 bun  bench/run.ts --filter noop
 deno run --allow-read --allow-write --allow-ffi bench/run.ts --out deno.json
@@ -76,14 +84,15 @@ See [docs/methodology.md](docs/methodology.md) for how measurements are taken, t
 ```text
 native/rust-core/   Rust implementations; no binding code
 native/napi/        raw Node-API binding (cdylib) over rust-core
+native/ffi/         plain C ABI (cdylib) over rust-core, for bun:ffi and Deno.dlopen
 bench/run.ts        entry point executed by each runtime
-bench/common/       shared cases, TS reference implementations, harness, addon loader
+bench/common/       shared cases, TS reference implementations, harness, Node-API and FFI loaders
 scripts/            build, orchestration, system probing, run comparison
 results/raw/        raw run output (git-ignored)
 docs/               methodology
 ```
 
-This differs from the proposed structure below in one way: there are no per-runtime `bench/node|bun|deno` directories. Every runtime runs the same entry point, so separate directories would only duplicate it. They should be added only when a runtime needs its own path (for example `bun:ffi` or Deno FFI).
+This differs from the proposed structure below in one way: there are no per-runtime `bench/node|bun|deno` directories. Every runtime runs the same entry point and the same cases. The only runtime-specific code is `bench/common/ffi.ts`, which picks `bun:ffi` or `Deno.dlopen` to load the same C ABI library.
 
 ---
 
