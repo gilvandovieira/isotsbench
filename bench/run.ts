@@ -1,7 +1,7 @@
 // Runs the benchmark cases in the current runtime (Node.js, Bun or Deno).
 //
 //   node bench/run.ts [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32 | --case sum_i32/ts/10] [--out file.json]
-//   node bench/run.ts --list [--filter sum_i32]
+//   node bench/run.ts --list [--filter sum_i32] [--suite boundary,payload,return]
 //   bun  bench/run.ts ...
 //   deno run --allow-read --allow-write --allow-ffi bench/run.ts ...
 
@@ -10,7 +10,8 @@ import os from "node:os";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { buildCaseIds, buildCases, checkEquivalence } from "./common/cases.ts";
-import { formatNs, formatRate, table } from "./common/format.ts";
+import { caseGroup, formatDataRate, formatNs, formatRate, table } from "./common/format.ts";
+import { parseSuites, suiteOf } from "./common/suites.ts";
 import { type CaseResult, measure, type Options, TIMER } from "./common/harness.ts";
 
 const RESULT_SCHEMA_VERSION = 2;
@@ -41,16 +42,17 @@ function positiveInt(name: string, value: string): number {
 
 function printResults(results: CaseResult[]): void {
   const tsMedian = new Map(
-    results.filter((r) => r.impl === "ts").map((r) => [`${r.op}/${r.size}`, r.ns_per_op.median]),
+    results.filter((r) => r.impl === "ts").map((r) => [caseGroup(r.id), r.ns_per_op.median]),
   );
   const rows = results.map((r) => {
     const s = r.ns_per_op;
-    const baseline = tsMedian.get(`${r.op}/${r.size}`);
+    const baseline = tsMedian.get(caseGroup(r.id));
     const ratio = r.impl !== "ts" && baseline ? `${(s.median / baseline).toFixed(2)}×` : "";
     return [
       r.id,
       formatNs(s.median),
       `${formatRate(r.ops_per_s)}ops/s`,
+      formatDataRate(r.op, r.payload, s.median),
       `${((s.stddev / s.mean) * 100).toFixed(1)}%`,
       formatNs(s.min),
       formatNs(s.max),
@@ -58,7 +60,7 @@ function printResults(results: CaseResult[]): void {
       ratio,
     ];
   });
-  console.log(table(["case", "median/op", "throughput", "rsd", "min/op", "max/op", "iters", "vs ts"], rows));
+  console.log(table(["case", "median/op", "throughput", "data rate", "rsd", "min/op", "max/op", "iters", "vs ts"], rows));
 }
 
 function main(): void {
@@ -69,14 +71,17 @@ function main(): void {
       samples: { type: "string", default: "30" },
       "sample-ms": { type: "string", default: "20" },
       filter: { type: "string" },
+      suite: { type: "string" },
       case: { type: "string" },
       list: { type: "boolean", default: false },
       out: { type: "string" },
     },
   });
   if (values.filter && values.case) throw new Error("use either --filter or --case, not both");
+  const suites = values.suite ? parseSuites(values.suite) : null;
   const select = (id: string) =>
-    values.case ? id === values.case : !values.filter || id.includes(values.filter);
+    (!suites || suites.includes(suiteOf(id.split("/")[0]))) &&
+    (values.case ? id === values.case : !values.filter || id.includes(values.filter));
 
   if (values.list) {
     // Listing constructs no cases, so it allocates no benchmark data.
@@ -93,7 +98,7 @@ function main(): void {
   const runtime = runtimeName();
 
   const cases = buildCases(select);
-  if (cases.length === 0) throw new Error(`no case matches ${values.case ?? values.filter}`);
+  if (cases.length === 0) throw new Error(`no case matches ${values.case ?? values.filter ?? values.suite}`);
 
   console.error(
     `${runtime}: ${cases.length} cases, warmup ${options.warmup}, samples ${options.samples}, ~${options.sampleMs} ms/sample`,
@@ -105,7 +110,8 @@ function main(): void {
   });
   const finishedAt = new Date().toISOString();
 
-  checkEquivalence();
+  // Verify every operation of the suites this process measured.
+  checkEquivalence([...new Set(cases.map((c) => suiteOf(c.op)))]);
 
   printResults(results);
 
@@ -125,7 +131,7 @@ function main(): void {
       },
       timer: TIMER,
       options,
-      equivalence: "checked after measurement",
+      equivalence: "checked after measurement, for the suites of the measured cases",
       startedAt,
       finishedAt,
       // In execution order.

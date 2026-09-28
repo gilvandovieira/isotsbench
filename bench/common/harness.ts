@@ -6,6 +6,8 @@
 
 import process from "node:process";
 import type { Case } from "./cases.ts";
+import type { Payload } from "./payloads.ts";
+import { type Suite, suiteOf } from "./suites.ts";
 
 export interface Options {
   warmup: number;
@@ -28,6 +30,16 @@ export interface CaseResult {
   /** "none", "node-api", "bun:ffi" or "Deno.dlopen"; absent in results recorded before FFI paths existed. */
   binding?: string;
   size: number | null;
+  /** Payload flavour (string_len: "ascii" or "utf8"); null otherwise. Absent before M3. */
+  variant?: string | null;
+  /** Kind and size (bytes or record count) of the data crossing the boundary; null for scalar cases. Absent before M3. */
+  payload?: Payload | null;
+  /** "boundary", "payload" or "return". Absent before suites existed (derive it with suiteOf(op)). */
+  suite?: Suite;
+  /** Return cases: result representation when a path has several ("objects", "packed"); null otherwise. */
+  strategy?: string | null;
+  /** Return cases: allocation/fill/copy strategy of the result; null otherwise. */
+  ownership?: string | null;
   iterations: number;
   /** Raw elapsed time of each warmup batch, in ns. Not used for stats. */
   warmup_ns: number[];
@@ -89,6 +101,11 @@ export function measure(c: Case, options: Options): CaseResult {
     impl: c.impl,
     binding: c.binding,
     size: c.size,
+    variant: c.variant ?? null,
+    payload: c.payload ?? null,
+    suite: suiteOf(c.op),
+    strategy: c.strategy ?? null,
+    ownership: c.ownership ?? null,
     iterations,
     warmup_ns,
     samples_ns,
