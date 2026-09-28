@@ -1,17 +1,19 @@
 // Runs the benchmark cases in the current runtime (Node.js, Bun or Deno).
 //
-//   node bench/run.ts [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32] [--out file.json]
+//   node bench/run.ts [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32 | --case sum_i32/ts/10] [--out file.json]
+//   node bench/run.ts --list [--filter sum_i32]
 //   bun  bench/run.ts ...
 //   deno run --allow-read --allow-write --allow-ffi bench/run.ts ...
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import process from "node:process";
 import { parseArgs } from "node:util";
-import { buildCases, checkEquivalence } from "./common/cases.ts";
+import { buildCaseIds, buildCases, checkEquivalence } from "./common/cases.ts";
 import { formatNs, formatRate, table } from "./common/format.ts";
 import { type CaseResult, measure, type Options, TIMER } from "./common/harness.ts";
 
-const RESULT_SCHEMA_VERSION = 1;
+const RESULT_SCHEMA_VERSION = 2;
 
 function runtimeName(): "node" | "bun" | "deno" {
   // Bun and Deno also expose process.versions.node, so check them first.
@@ -19,6 +21,16 @@ function runtimeName(): "node" | "bun" | "deno" {
   if (g.Bun) return "bun";
   if (g.Deno) return "deno";
   return "node";
+}
+
+/**
+ * CPUs this process may run on, as the kernel reports it. Linux only, and
+ * not under Deno, which refuses /proc reads without --allow-all; widening
+ * Deno's permissions for bookkeeping would change how it is launched.
+ */
+function cpuAffinity(runtime: string): string | null {
+  if (process.platform !== "linux" || runtime === "deno") return null;
+  return readFileSync("/proc/self/status", "utf8").match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? null;
 }
 
 function positiveInt(name: string, value: string): number {
@@ -57,9 +69,22 @@ function main(): void {
       samples: { type: "string", default: "30" },
       "sample-ms": { type: "string", default: "20" },
       filter: { type: "string" },
+      case: { type: "string" },
+      list: { type: "boolean", default: false },
       out: { type: "string" },
     },
   });
+  if (values.filter && values.case) throw new Error("use either --filter or --case, not both");
+  const select = (id: string) =>
+    values.case ? id === values.case : !values.filter || id.includes(values.filter);
+
+  if (values.list) {
+    // Listing constructs no cases, so it allocates no benchmark data.
+    const ids = buildCaseIds().filter(select);
+    console.log(ids.join("\n"));
+    return;
+  }
+
   const options: Options = {
     warmup: positiveInt("warmup", values.warmup),
     samples: positiveInt("samples", values.samples),
@@ -67,10 +92,8 @@ function main(): void {
   };
   const runtime = runtimeName();
 
-  checkEquivalence();
-
-  const cases = buildCases().filter((c) => !values.filter || c.id.includes(values.filter));
-  if (cases.length === 0) throw new Error(`no case matches --filter ${values.filter}`);
+  const cases = buildCases(select);
+  if (cases.length === 0) throw new Error(`no case matches ${values.case ?? values.filter}`);
 
   console.error(
     `${runtime}: ${cases.length} cases, warmup ${options.warmup}, samples ${options.samples}, ~${options.sampleMs} ms/sample`,
@@ -80,6 +103,9 @@ function main(): void {
     console.error(`  [${i + 1}/${cases.length}] ${c.id}`);
     return measure(c, options);
   });
+  const finishedAt = new Date().toISOString();
+
+  checkEquivalence();
 
   printResults(results);
 
@@ -90,10 +116,19 @@ function main(): void {
       versions: process.versions,
       platform: process.platform,
       arch: process.arch,
+      process: {
+        pid: process.pid,
+        affinity: cpuAffinity(runtime),
+        // Respects the affinity mask in all three runtimes.
+        allowedCpuCount: os.availableParallelism(),
+        execArgv: process.execArgv,
+      },
       timer: TIMER,
       options,
+      equivalence: "checked after measurement",
       startedAt,
-      finishedAt: new Date().toISOString(),
+      finishedAt,
+      // In execution order.
       results,
     };
     writeFileSync(values.out, JSON.stringify(output, null, 2) + "\n");

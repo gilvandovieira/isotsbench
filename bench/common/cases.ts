@@ -67,8 +67,9 @@ function sumCase(impl: Impl, size: number): Case {
   };
 }
 
-export function buildCases(): Case[] {
-  return [
+/** Builds only the selected cases, so a process allocates data for nothing else. */
+export function buildCases(select: (id: string) => boolean = () => true): Case[] {
+  const scalar: Case[] = [
     {
       id: "noop/ts",
       op: "noop",
@@ -111,13 +112,30 @@ export function buildCases(): Case[] {
         return acc;
       },
     },
-    ...SUM_I32_SIZES.flatMap((size) => [sumCase("ts", size), sumCase("napi", size)]),
   ];
+  const selected = scalar.filter((c) => select(c.id));
+  const sums = SUM_I32_SIZES.flatMap((size) =>
+    (["ts", "napi"] as const).filter((impl) => select(`sum_i32/${impl}/${size}`)).map((impl) => sumCase(impl, size))
+  );
+  return [...selected, ...sums];
+}
+
+/** Every case id in canonical order; selects nothing, so no data is allocated. */
+export function buildCaseIds(): string[] {
+  const ids: string[] = [];
+  buildCases((id) => {
+    ids.push(id);
+    return false;
+  });
+  return ids;
 }
 
 /**
- * Confirms both implementations agree before anything is timed.
- * Throws on the first mismatch.
+ * Confirms both implementations agree. Throws on the first mismatch.
+ *
+ * Runs after measurement: calling the functions beforehand with overflow
+ * and edge-case inputs would shape the JIT's type feedback for the cases
+ * being measured.
  */
 export function checkEquivalence(): void {
   const expect = (label: string, actual: unknown, expected: unknown) => {

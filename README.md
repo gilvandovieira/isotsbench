@@ -33,30 +33,43 @@ No npm packages or crates are required.
 ### Commands
 
 ```bash
-make bench         # build addon, run full matrix, save raw JSON, print summary
-make bench-quick   # fast smoke run of the same pipeline (numbers not meaningful)
-make build         # cargo build --release + copy addon to build/isotsbench_napi.node
-make test          # Rust unit tests
-make check         # clippy + deno type check of the TypeScript
+make bench                        # build, fresh process per case, shuffled, 1 run, unpinned
+make bench-quick                  # smoke run: one process per runtime, short batches (numbers not meaningful)
+make bench-official CPUS=8,10     # official profile: pinned via taskset, fresh and shared processes, shuffled, 3 runs (Linux)
+make compare RUNS="results/raw/<a> results/raw/<b>"   # run-to-run variance across runs/directories
+make build                        # cargo build --release + copy addon to build/isotsbench_napi.node
+make test                         # Rust unit tests
+make check                        # clippy + deno type check of the TypeScript
 ```
 
 The same commands work without `make`:
 
 ```bash
-node scripts/bench.ts [--runtimes node,bun,deno] [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32]
+node scripts/bench.ts [--runtimes node,bun,deno] [--isolation case|runtime|both] [--runs N] \
+  [--order shuffle|fixed] [--seed N] [--cpus LIST] [--official] \
+  [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32]
+node scripts/compare.ts results/raw/<run-id> [results/raw/<run-id> ...]
 ```
 
 To run a single runtime by hand (after `make build`):
 
 ```bash
-node bench/run.ts --out node.json
-bun  bench/run.ts --out bun.json
+node bench/run.ts --list                      # case ids
+node bench/run.ts --case sum_i32/napi/1000 --out node.json
+bun  bench/run.ts --filter noop
 deno run --allow-read --allow-write --allow-ffi bench/run.ts --out deno.json
 ```
 
-Each run writes `results/raw/<run-id>/environment.json` plus one `<runtime>.json` per runtime. These files hold the raw per-sample timings and the derived median/mean/stddev/min/max ns/op and ops/s. The summary table shows the median ns/op for each runtime, the native/TS ratio, and the `sum_i32` break-even size.
+Each run writes `results/raw/<run-id>/environment.json` plus one `<runtime>.json` per runtime.
 
-See [docs/methodology.md](docs/methodology.md) for how measurements are taken and their known limitations.
+- `environment.json` records the machine, the CPU topology, frequency and power settings, and every methodology setting.
+- Each `<runtime>.json` holds the raw per-sample timings and the derived median/mean/stddev/min/max ns/op and ops/s.
+
+The summary shows the median ns/op for each runtime, the native/TS ratio and the `sum_i32` break-even size. With `--runs` > 1 it also shows the run-to-run variance.
+
+The harness warns when conditions are unsuitable for official results (unpinned, mixed core types, non-`performance` governor, turbo, …). It never changes system settings itself.
+
+See [docs/methodology.md](docs/methodology.md) for how measurements are taken, the official-run procedure, and known limitations.
 
 ### Layout
 
@@ -65,7 +78,7 @@ native/rust-core/   Rust implementations; no binding code
 native/napi/        raw Node-API binding (cdylib) over rust-core
 bench/run.ts        entry point executed by each runtime
 bench/common/       shared cases, TS reference implementations, harness, addon loader
-scripts/            build + benchmark orchestration
+scripts/            build, orchestration, system probing, run comparison
 results/raw/        raw run output (git-ignored)
 docs/               methodology
 ```
