@@ -113,7 +113,25 @@ async function devtools(browserPath: string) {
   ];
   // GitHub's Ubuntu runners restrict the user namespaces Chromium's sandbox needs. The page is local.
   if (process.env.CI) args.push("--no-sandbox");
-  const child = spawn(browserPath, [...args, "about:blank"], { stdio: "ignore" });
+  // Its own process group: google-chrome is a wrapper script, and killing it alone leaves the browser running.
+  const child = spawn(browserPath, [...args, "about:blank"], { stdio: "ignore", detached: true });
+  const kill = () => {
+    try {
+      process.kill(-child.pid!, "SIGKILL");
+    } catch {
+      // already gone
+    }
+    rmSync(profile, { recursive: true, force: true });
+  };
+  try {
+    return await connect(profile, kill);
+  } catch (error) {
+    kill();
+    throw error;
+  }
+}
+
+async function connect(profile: string, kill: () => void) {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   let port = 0;
   for (let i = 0; i < 100 && !port; i++) {
@@ -127,8 +145,17 @@ async function devtools(browserPath: string) {
     targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
     if (!targets.some((t) => t.type === "page")) await sleep(100);
   }
-  const socket = new WebSocket(targets.find((t) => t.type === "page")!.webSocketDebuggerUrl);
-  await new Promise((resolve) => socket.addEventListener("open", resolve));
+  const page = targets.find((t) => t.type === "page");
+  assert.ok(page, "Chromium opened no page");
+  const socket = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("DevTools connection timed out")), 10_000);
+    socket.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve(undefined);
+    });
+    socket.addEventListener("error", () => reject(new Error("DevTools connection failed")));
+  });
   let id = 0;
   const pending = new Map<number, (message: Json) => void>();
   const requests: string[] = [];
@@ -151,11 +178,22 @@ async function devtools(browserPath: string) {
   const evaluate = async (expression: string) =>
     (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.result.value;
   const until = async (expression: string, what: string) => {
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       if (await evaluate(expression)) return;
       await sleep(100);
     }
-    assert.fail(`timed out waiting for ${what}`);
+    const seen = await evaluate(`JSON.stringify({
+      url: location.href,
+      lang: document.documentElement.lang,
+      ready: document.documentElement.classList.contains("ready"),
+      charts: document.querySelectorAll(".viz-plot svg").length,
+      errors: [...document.querySelectorAll(".viz-error, .load-error")].map((e) => e.textContent),
+    })`);
+    assert.fail(
+      `timed out waiting for ${what}: page ${seen}; console ${JSON.stringify(problems)}; requests ${
+        JSON.stringify(requests)
+      }`,
+    );
   };
   await send("Runtime.enable");
   await send("Network.enable");
@@ -168,8 +206,7 @@ async function devtools(browserPath: string) {
     problems,
     close() {
       socket.close();
-      child.kill();
-      rmSync(profile, { recursive: true, force: true });
+      kill();
     },
   };
 }
@@ -179,11 +216,14 @@ type Json = any;
 
 test(
   "in Chromium under /isotsbench/: English first, Portuguese on request and remembered, charts from the dataset, nothing fetched from elsewhere",
-  { skip: !chromium && !process.env.CI ? "Chromium not found (set CHROMIUM_PATH)" : false },
+  { skip: !chromium && !process.env.CI ? "Chromium not found (set CHROMIUM_PATH)" : false, timeout: 90_000 },
   async () => {
     assert.ok(chromium, "Chromium is required in CI");
     const server = await serveSite(SITE);
-    const page = await devtools(chromium.path);
+    const page = await devtools(chromium.path).catch(async (error) => {
+      await server.close();
+      throw error;
+    });
     const en = JSON.parse(read("i18n/en.json"));
     const pt = JSON.parse(read("i18n/pt-BR.json"));
     const state = async () =>

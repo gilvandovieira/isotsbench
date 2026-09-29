@@ -51,7 +51,12 @@ export function serveSite(dir: string, port = 0): Promise<SiteServer> {
       const actual = typeof address === "object" && address ? address.port : port;
       resolve({
         url: `http://127.0.0.1:${actual}${BASE}`,
-        close: () => new Promise((done) => server.close(() => done())),
+        // Browsers keep connections alive; close them, or close() waits for them.
+        close: () =>
+          new Promise((done) => {
+            server.close(() => done());
+            server.closeAllConnections();
+          }),
       });
     });
   });
