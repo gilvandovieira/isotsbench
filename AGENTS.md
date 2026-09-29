@@ -63,13 +63,15 @@ docs/                 see "Documentation to keep current"
 
 ```bash
 make check                        # cargo clippy -D warnings + deno check of every entry point and test
-make test                         # cargo test, build (no scriptc), tests/wasm.test.ts, tests/browser.test.ts
+make test                         # cargo test, build (no scriptc), tests/{wasm,browser,system-setup}.test.ts
 make build                        # everything in build/, including scriptc when installed
 
 make bench-quick                  # smoke: one shared process per runtime, short batches. Numbers meaningless.
 make bench                        # fresh process per case, shuffled, 1 run
 make bench SUITE=payload BENCH_ARGS="--runtimes node,bun --filter string_len"
+make setup CPUS=8,10              # official conditions via sudo; saves the originals (Linux)
 make bench-official CPUS=8,10     # pinned, --isolation both, shuffled, 3 runs
+make teardown                     # restores the saved settings
 
 make bench-browser-quick          # smoke: one page per browser and thread, short batches
 make bench-browser                # fresh browser per case, 1 run
@@ -82,7 +84,7 @@ make compare RUNS="results/raw/<a> results/raw/<b>"
 - Browser orchestrator (`node scripts/bench-browser.ts`): the same, minus `--runtimes` and `--suite` (the browser covers the boundary suite only), plus `--browsers chromium,firefox`, `--threads main,worker` and `--timeout-s`.
 - One runtime by hand: `node bench/run.ts --case sum_i32/ts/1000`, or `--list` to print case ids in canonical order.
 - `--official` requires `--cpus`, `--isolation both`, `--order shuffle` and `--runs` ≥ 3. Choose CPUs of one class with no SMT siblings, avoiding CPU 0. Use `system.cpuClasses` and `system.cpus[].smtSiblings` in any `environment.json`. Browsers need at least 3: page main thread, Worker, everything else.
-- The harness **never changes system settings**. Governor and turbo are recorded and warned about; only the user can change them.
+- The benchmark runners **never change system settings**; they record and warn. `make setup` (Linux, `sudo`) saves the current settings to `.official-setup.json`. It then sets the governor and EPP to `performance`, turbo off, and the platform profile to `performance`. `make teardown` restores exactly the saved values. Both change the machine: run them only when the user asks. `node scripts/system-setup.ts apply --dry-run` is safe.
 - Do not run other heavy work while a benchmark runs. Browser pages load `bench/` from disk on every launch, so **do not edit `bench/` during a browser run**.
 
 ## How measurement works (do not break)

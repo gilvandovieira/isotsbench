@@ -8,7 +8,7 @@ RUNS ?=
 SUITE ?=
 SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 
-.PHONY: build test check bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare clean
+.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare clean
 
 build:
 	node scripts/build.ts
@@ -20,10 +20,22 @@ test:
 	node scripts/build.ts --skip-scriptc
 	node tests/wasm.test.ts
 	node tests/browser.test.ts
+	node tests/system-setup.test.ts
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
 	deno check bench/run.ts bench/scriptc/run.ts bench/browser/page.ts bench/browser/worker.ts scripts/*.ts tests/*.ts
+
+# Official-run conditions (Linux, root through sudo): performance governor and EPP,
+# turbo off, performance platform profile. setup saves the current values to
+# .official-setup.json first; teardown writes exactly those back. The benchmark
+# runners themselves never change system settings. CPUS=... only adds the pinning
+# checks to the report printed after setup.
+setup:
+	node scripts/system-setup.ts apply $(if $(CPUS),--cpus $(CPUS))
+
+teardown:
+	node scripts/system-setup.ts restore
 
 # Fresh process per case, shuffled order, one run, unpinned.
 bench:

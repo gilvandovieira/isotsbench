@@ -136,7 +136,23 @@ On a platform other than Linux, `--cpus` is rejected. It doesn't silently fall b
 
 On other platforms, the only warning says that conditions are unverified.
 
-The harness **never changes system settings**. To prepare a Linux machine by hand (root required; restore the settings afterwards):
+The benchmark runners **never change system settings**. `make setup` does, and only when you run it (Linux, root through `sudo`):
+
+- It saves the current value of every setting it manages to `.official-setup.json` (git-ignored).
+- It sets every cpufreq policy's governor and energy-performance preference to `performance`, turns turbo off (`intel_pstate/no_turbo`, or `cpufreq/boost`), and sets the ACPI platform profile to `performance` when offered.
+- It verifies each write, then prints the warnings that remain (add `CPUS=…` to include the pinning checks).
+
+`make teardown` writes the saved values back, governors before EPP, and removes the state file. `make setup` refuses to run while a state file exists, so the original settings are never overwritten by already-changed ones. `node scripts/system-setup.ts apply --dry-run` (or `restore --dry-run`) lists the writes without making them.
+
+```bash
+make setup CPUS=8,10
+make bench-official CPUS=8,10
+make teardown
+```
+
+A daemon that manages power settings (for example power-profiles-daemon) can change them again if its profile changes during a run. The conditions are checked once, when a run starts.
+
+The same settings by hand (root required; restore them afterwards):
 
 ```bash
 sudo cpupower frequency-set -g performance                             # governor
@@ -160,11 +176,12 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
 ## Official-run procedure
 
 1. Use a machine you control, not shared CI. Close other applications and keep it plugged in.
-2. Prepare the conditions by hand (above) and pick a CPU set (above).
+2. Prepare the conditions with `make setup CPUS=<list>` or by hand (above), and pick a CPU set (above).
 3. `make bench-official CPUS=<list>`. This runs `--official`, which requires `--cpus`, `--isolation both`, `--order shuffle` and at least 3 runs. Keep the default harness options (warmup, samples, sample-ms) unless you are deliberately changing the methodology: some V8 results depend on how long a process runs (see [findings](findings.md#jit-history-fresh-versus-shared-processes)), so runs are only comparable with identical options.
 4. The run ends by printing either `official criteria met` or `official criteria NOT met`. The result is also stored as `conditions.officialCriteriaMet`, which is true only for the official profile with no condition warnings and no failed units.
 5. Publish the fresh-process and shared-process results side by side. In the variance table, report every `unstable` case as unstable, not as a single number. Report every case in the isolation divergence table with both numbers.
-6. To publish, commit the whole `results/raw/<run-id>/` directory. `results/raw/*` is git-ignored, so add it with `git add -f results/raw/<run-id>`.
+6. Restore the machine with `make teardown`.
+7. To publish, commit the whole `results/raw/<run-id>/` directory. `results/raw/*` is git-ignored, so add it with `git add -f results/raw/<run-id>`.
 
 ## Output
 

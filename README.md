@@ -99,7 +99,13 @@ make bench-official CPUS=8,10     # pinned, fresh and shared processes, shuffled
 make bench-browser-official CPUS=2,8,10   # the same for browsers (fresh and shared pages)
 ```
 
-It never changes system settings. It warns when the governor, turbo, pinning or CPU topology make a run unsuitable, and records whether the official criteria were met. See the [official-run procedure](docs/methodology.md#official-run-procedure).
+The benchmark itself never changes system settings. It warns when the governor, turbo, pinning or CPU topology make a run unsuitable, and records whether the official criteria were met. On Linux, `make setup` applies the official settings through `sudo` after saving the current ones, and `make teardown` restores them:
+
+```bash
+make setup CPUS=8,10 && make bench-official CPUS=8,10; make teardown
+```
+
+See the [official-run procedure](docs/methodology.md#official-run-procedure).
 
 ## Documentation
 
