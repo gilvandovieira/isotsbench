@@ -11,7 +11,7 @@ What has been built, and what is planned but not implemented. Current capabiliti
 | v0.3.0 | Plain C ABI; Bun and Deno FFI paths |
 | v0.4.0 | Payload ingress and return-path suites; suite selection |
 | v0.5.0 | scriptc: compiled TypeScript and scriptc native FFI ([scriptc.md](scriptc.md)) |
-| v0.6.0 (unreleased) | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
+| v0.6.0 | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
 
 v0.6.0 has one pinned official-profile run of the boundary suite ([findings.md](findings.md#webassembly)). It does not meet the official criteria: those need the performance governor and turbo disabled, which the benchmark runner records but cannot set.
 
