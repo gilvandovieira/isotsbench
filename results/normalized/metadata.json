@@ -1,0 +1,355 @@
+{
+  "schema": 1,
+  "generator": "scripts/normalize-results.ts",
+  "command": "node scripts/normalize-results.ts",
+  "definitions": {
+    "unit": "nanoseconds per operation",
+    "run_median": "a run's `ns_per_op.median` for the case: median over its measured batches",
+    "median_ns": "median of the per-run medians",
+    "spread": "(max - min) / median of the per-run medians",
+    "stability": "unstable when spread > 0.05; report min_run_ns to max_run_ns, not median_ns",
+    "divergent": "fresh and shared per-run medians do not overlap and differ by more than 5%",
+    "isolation": {
+      "case": "fresh process (or browser) per case",
+      "runtime": "one shared process per runtime (or page per browser and thread), cases in canonical order"
+    },
+    "path": "the second segment of the case id; paths with different semantics have different names and are never merged",
+    "runs": "each per-run median points to results[index] of a raw file under results/raw/"
+  },
+  "counts": {
+    "records": 1572,
+    "unstable": 287,
+    "divergent_cases": 182,
+    "by_source": {
+      "2026-09-29T10-24-40-196Z": 1176,
+      "2026-09-29T11-49-48-358Z": 396
+    }
+  },
+  "sources": [
+    {
+      "id": "2026-09-29T10-24-40-196Z",
+      "directory": "results/raw/2026-09-29T10-24-40-196Z",
+      "kind": "runtime",
+      "created_at": "2026-09-29T10:24:40.217Z",
+      "finished_at": "2026-09-29T11:49:45.833Z",
+      "git": {
+        "commit": "da569f4299c5c6b1c8556cb8d607138d0b829719",
+        "dirty": false
+      },
+      "official_criteria_met": true,
+      "condition_warnings": [],
+      "failed_units": 0,
+      "options": {
+        "warmup": 5,
+        "samples": 30,
+        "sampleMs": 20
+      },
+      "methodology": {
+        "profile": "official",
+        "isolation": "both",
+        "runs": 3,
+        "order": "shuffle",
+        "seed": 3281510320,
+        "cpus": "8,10",
+        "pinning": {
+          "tool": "taskset de util-linux 2.42.4",
+          "command": [
+            "taskset",
+            "-c",
+            "8,10"
+          ]
+        }
+      },
+      "machine": {
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i7-12700H",
+          "cores": 20,
+          "arch": "x64"
+        },
+        "memory_bytes": 16359882752,
+        "os": {
+          "platform": "linux",
+          "type": "Linux",
+          "release": "7.2.8-1-cachyos",
+          "version": "#1 SMP PREEMPT_DYNAMIC Sat, 26 Sep 2026 19:43:45 +0000"
+        },
+        "cpu_classes": [
+          {
+            "key": "P-core, 2300 MHz, capacity 1024",
+            "cpus": "0-11"
+          },
+          {
+            "key": "E-core, 1700 MHz, capacity 1024",
+            "cpus": "12-19"
+          }
+        ],
+        "scaling_driver": "intel_pstate",
+        "no_turbo": "1",
+        "platform_profile": "performance",
+        "pinned_cpus": [
+          {
+            "cpu": 8,
+            "core_type": "P-core",
+            "governor": "performance",
+            "epp": "performance"
+          },
+          {
+            "cpu": 10,
+            "core_type": "P-core",
+            "governor": "performance",
+            "epp": "performance"
+          }
+        ]
+      },
+      "software": {
+        "environments": {
+          "node": "v24.21.0",
+          "bun": "1.4.2",
+          "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
+          "scriptc": "0.1.7"
+        },
+        "browsers": null,
+        "rust": {
+          "rustc": "1.98.1",
+          "commit": "48a229ceaefd4985c50990b14116b6d856af0985",
+          "target": "x86_64-unknown-linux-gnu",
+          "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+          "profile": "release",
+          "rustflags": null
+        },
+        "native": {
+          "napi": {
+            "path": "build/isotsbench_napi.node",
+            "sizeBytes": 432840,
+            "sha256": "38ea5ecb3a9bd9fa755b149c96a6f3f3fc96165a3b421465aca8888cabbf64d4"
+          },
+          "ffi": {
+            "path": "build/libisotsbench_ffi.so",
+            "sizeBytes": 422664,
+            "sha256": "9a60ad7af6877390697ebc3236bd91abb83b268b8902af1d9724f5b8e91f4317"
+          },
+          "scriptc": {
+            "compiler": "0.1.7",
+            "command": [
+              "scriptc",
+              "build",
+              "bench/scriptc/run.ts",
+              "--ffi",
+              "native/scriptc/ffi.json",
+              "-o",
+              "build/isotsbench-scriptc"
+            ],
+            "executable": {
+              "path": "build/isotsbench-scriptc",
+              "sizeBytes": 6566976,
+              "sha256": "e7bdecb0290605fda2cb0726e6ca627c96b26a1bb2883efcaa0a0697528e383f"
+            },
+            "archive": {
+              "path": "target/release/libisotsbench_scriptc.a",
+              "sizeBytes": 22642258,
+              "sha256": "b0ed0ea3da9eddbf8191d31365295a65d3e38e835fa17992eb2a3dc1ac8b326a"
+            },
+            "manifest": {
+              "path": "native/scriptc/ffi.json",
+              "sizeBytes": 1026,
+              "sha256": "714c04d121fb83bcbdf9cd6c2d65db6e4456c6ef75b505ea95adace5c4f021ed"
+            }
+          }
+        },
+        "wasm": {
+          "target": "wasm32-unknown-unknown",
+          "default": {
+            "path": "build/isotsbench.wasm",
+            "sizeBytes": 20232,
+            "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897"
+          },
+          "simd128": {
+            "path": "build/isotsbench-simd128.wasm",
+            "sizeBytes": 20293,
+            "sha256": "ee5646017cb1a008d03ea20e1a1c02bc3122b073397419b02e890fe66218536d"
+          }
+        }
+      },
+      "files": [
+        {
+          "path": "results/raw/2026-09-29T10-24-40-196Z/environment.json",
+          "sha256": "05bbd3da723f94915701e73875decaae75624ebfd32d225b67175e78c3e601d2"
+        },
+        {
+          "path": "results/raw/2026-09-29T10-24-40-196Z/node.json",
+          "sha256": "1ca7eae53ad032cfbb18b7c39d795147e9374b33700e05dc87c1a371b4be416b",
+          "raw_results": 810
+        },
+        {
+          "path": "results/raw/2026-09-29T10-24-40-196Z/bun.json",
+          "sha256": "57496ada6583896af9bc443c509cd7359b2cfd4521e1eda1e638958f19be01dc",
+          "raw_results": 1116
+        },
+        {
+          "path": "results/raw/2026-09-29T10-24-40-196Z/deno.json",
+          "sha256": "7a631a5e35b906ea5027ad849411e3d417961d2b7b2c91c4e299e892c0a67ae1",
+          "raw_results": 1128
+        },
+        {
+          "path": "results/raw/2026-09-29T10-24-40-196Z/scriptc.json",
+          "sha256": "21d17018811f05dfe03bf85e6106d2128c3d0ef98833aaf20fe3e36e815f67bb",
+          "raw_results": 474
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T11-49-48-358Z",
+      "directory": "results/raw/2026-09-29T11-49-48-358Z",
+      "kind": "browser",
+      "created_at": "2026-09-29T11:49:48.358Z",
+      "finished_at": "2026-09-29T12:15:47.923Z",
+      "git": {
+        "commit": "da569f4299c5c6b1c8556cb8d607138d0b829719",
+        "dirty": false
+      },
+      "official_criteria_met": true,
+      "condition_warnings": [],
+      "failed_units": 0,
+      "options": {
+        "warmup": 5,
+        "samples": 30,
+        "sampleMs": 20
+      },
+      "methodology": {
+        "profile": "official",
+        "isolation": "both",
+        "runs": 3,
+        "order": "shuffle",
+        "seed": 4281897143,
+        "cpus": "2,8,10",
+        "pinning": {
+          "tool": "taskset de util-linux 2.42.4",
+          "command": [
+            "taskset",
+            "-c",
+            "2,8,10"
+          ],
+          "scope": "the whole browser process group"
+        }
+      },
+      "machine": {
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i7-12700H",
+          "cores": 20,
+          "arch": "x64"
+        },
+        "memory_bytes": 16359882752,
+        "os": {
+          "platform": "linux",
+          "type": "Linux",
+          "release": "7.2.8-1-cachyos",
+          "version": "#1 SMP PREEMPT_DYNAMIC Sat, 26 Sep 2026 19:43:45 +0000"
+        },
+        "cpu_classes": [
+          {
+            "key": "P-core, 2300 MHz, capacity 1024",
+            "cpus": "0-11"
+          },
+          {
+            "key": "E-core, 1700 MHz, capacity 1024",
+            "cpus": "12-19"
+          }
+        ],
+        "scaling_driver": "intel_pstate",
+        "no_turbo": "1",
+        "platform_profile": "performance",
+        "pinned_cpus": [
+          {
+            "cpu": 2,
+            "core_type": "P-core",
+            "governor": "performance",
+            "epp": "performance"
+          },
+          {
+            "cpu": 8,
+            "core_type": "P-core",
+            "governor": "performance",
+            "epp": "performance"
+          },
+          {
+            "cpu": 10,
+            "core_type": "P-core",
+            "governor": "performance",
+            "epp": "performance"
+          }
+        ]
+      },
+      "software": {
+        "environments": {
+          "chromium.main": "Google Chrome for Testing 153.0.8010.12",
+          "chromium.worker": "Google Chrome for Testing 153.0.8010.12",
+          "firefox.main": "Mozilla Firefox 156.0.1",
+          "firefox.worker": "Mozilla Firefox 156.0.1"
+        },
+        "browsers": {
+          "chromium": {
+            "version": "Google Chrome for Testing 153.0.8010.12",
+            "engine": {
+              "name": "V8",
+              "version": "15.3.76.4",
+              "source": "DevTools /json/version of a separate launch"
+            }
+          },
+          "firefox": {
+            "version": "Mozilla Firefox 156.0.1",
+            "engine": {
+              "name": "SpiderMonkey",
+              "version": "156.0.1",
+              "source": "firefox --version"
+            }
+          }
+        },
+        "rust": {
+          "rustc": "1.98.1",
+          "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+          "rustflags": null
+        },
+        "native": null,
+        "wasm": {
+          "target": "wasm32-unknown-unknown",
+          "default": {
+            "path": "build/isotsbench.wasm",
+            "sizeBytes": 20232,
+            "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897"
+          },
+          "simd128": {
+            "path": "build/isotsbench-simd128.wasm",
+            "sizeBytes": 20293,
+            "sha256": "ee5646017cb1a008d03ea20e1a1c02bc3122b073397419b02e890fe66218536d"
+          }
+        }
+      },
+      "files": [
+        {
+          "path": "results/raw/2026-09-29T11-49-48-358Z/environment.json",
+          "sha256": "0459178de6208d77ced51704ac391951b627dd0527d5e9dc12027f631f42f150"
+        },
+        {
+          "path": "results/raw/2026-09-29T11-49-48-358Z/chromium.main.json",
+          "sha256": "c92de2f7bc35efeb4b27293bfd0af47eb89e41bfb33b26991ffad196b7fd06e4",
+          "raw_results": 234
+        },
+        {
+          "path": "results/raw/2026-09-29T11-49-48-358Z/chromium.worker.json",
+          "sha256": "c53882d6629670ca744e152d20e633827d6331c0ef4ddc91e97947c26bcbb7e9",
+          "raw_results": 360
+        },
+        {
+          "path": "results/raw/2026-09-29T11-49-48-358Z/firefox.main.json",
+          "sha256": "f0327605f53c191f6380d8fdd837c6aac2da91680c5818b9d9c18e4cd2eaebb0",
+          "raw_results": 234
+        },
+        {
+          "path": "results/raw/2026-09-29T11-49-48-358Z/firefox.worker.json",
+          "sha256": "917dee8076eb091bb64bbe89ac25de7d0adf031eeb59e1a83369f7ecb892873e",
+          "raw_results": 360
+        }
+      ]
+    }
+  ]
+}

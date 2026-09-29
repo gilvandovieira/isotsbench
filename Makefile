@@ -8,7 +8,7 @@ RUNS ?=
 SUITE ?=
 SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 
-.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare clean
+.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare normalize clean
 
 build:
 	node scripts/build.ts
@@ -66,6 +66,10 @@ bench-browser-official:
 compare:
 	$(if $(RUNS),,$(error set RUNS to one or more results/raw/<run-id> directories))
 	node scripts/compare.ts $(RUNS)
+
+# results/normalized/ from the committed official runs listed in scripts/normalize-results.ts.
+normalize:
+	node scripts/normalize-results.ts
 
 clean:
 	cargo clean
