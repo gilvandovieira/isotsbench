@@ -13,12 +13,15 @@ SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 build:
 	node scripts/build.ts
 
+# The TypeScript tests need the addon, the FFI library and the WASM builds, not the scriptc executable.
 test:
 	cargo test --workspace
+	node scripts/build.ts --skip-scriptc
+	node tests/wasm.test.ts
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
-	deno check bench/run.ts bench/scriptc/run.ts scripts/*.ts
+	deno check bench/run.ts bench/scriptc/run.ts scripts/*.ts tests/wasm.test.ts
 
 # Fresh process per case, shuffled order, one run, unpinned.
 bench:
