@@ -114,7 +114,7 @@ async function devtools(browserPath: string) {
   // GitHub's Ubuntu runners restrict the user namespaces Chromium's sandbox needs. The page is local.
   if (process.env.CI) args.push("--no-sandbox");
   // Its own process group: google-chrome is a wrapper script, and killing it alone leaves the browser running.
-  const child = spawn(browserPath, [...args, "about:blank"], { stdio: "ignore", detached: true });
+  const child = spawn(browserPath, [...args, "about:blank"], { stdio: ["ignore", "ignore", "inherit"], detached: true });
   const kill = () => {
     try {
       process.kill(-child.pid!, "SIGKILL");
