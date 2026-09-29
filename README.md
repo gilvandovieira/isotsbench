@@ -123,7 +123,7 @@ The published official runs are also available as one normalized dataset in `res
 | [scriptc.md](docs/scriptc.md) | the scriptc integration and how it differs from the other runtimes |
 | [wasm.md](docs/wasm.md) | WASM paths: inlining, linear-memory transfer, SIMD builds |
 | [browser.md](docs/browser.md) | browser main-thread and Worker paths: harness, clone/copy/transfer semantics, timing, metadata |
-| [findings.md](docs/findings.md) | measured observations so far (development runs, not official results) |
+| [findings.md](docs/findings.md) | official results plus historical observations from development runs |
 | [limitations.md](docs/limitations.md) | known caveats |
 | [design.md](docs/design.md) | motivation, questions, non-goals, how to use the results |
 | [roadmap.md](docs/roadmap.md) | what has been built and what is planned |

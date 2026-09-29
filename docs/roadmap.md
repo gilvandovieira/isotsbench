@@ -13,6 +13,7 @@ What has been built, and what is planned but not implemented. Current capabiliti
 | v0.5.0 | scriptc: compiled TypeScript and scriptc native FFI ([scriptc.md](scriptc.md)) |
 | v0.6.0 | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
 | v0.7.0 | Browsers (Chromium, Firefox): the boundary suite on the main thread, and main → Worker → TypeScript/WASM paths that separate structured clone, explicit copy and transfer ([browser.md](browser.md)) |
+| v0.7.1 | Finalized official evidence and report publication: two official runs, the normalized dataset and the bilingual GitHub Pages report; editorial completion with no benchmark or methodology changes |
 
 The first runs to meet the official criteria cover every runtime path and every browser path of v0.7.0. Their raw data is committed ([findings.md](findings.md#official-results)), with a normalized dataset in `results/normalized/` ([methodology.md](methodology.md#normalized-dataset)). Earlier pinned runs were development runs with `powersave` and turbo on.
 

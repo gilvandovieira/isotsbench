@@ -51,7 +51,7 @@ Each question is marked with where it is answered today, or with *planned* (see 
 | Question | Status |
 | --- | --- |
 | What is the minimum overhead of a JS → native → JS call? | `noop` (boundary suite) |
-| How does that overhead differ between runtimes and bindings? | boundary suite, all runtimes |
+| How does that overhead differ between runtimes and bindings? | boundary suite, all runtimes; [official results](findings.md#official-results) published in v0.7.1 |
 | How expensive is scalar argument marshalling? | `add_i32`, `return_f64` |
 | How expensive are strings, in and out? | `string_len`, `return_string` |
 | How expensive are buffers and typed arrays? Can they cross without copying? | `bytes_len`, `checksum_bytes`, `return_bytes` |
