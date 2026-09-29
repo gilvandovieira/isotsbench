@@ -4,7 +4,7 @@ How measurements are taken, isolated, controlled, checked and recorded. What is 
 
 ## Shared TypeScript
 
-`bench/` is plain TypeScript run directly by Node.js 24+ (built-in type stripping), Bun and Deno. It uses only erasable syntax and `node:` built-ins; nothing is transpiled or bundled. `bench/scriptc/` and the shared modules it imports are additionally compiled by scriptc.
+`bench/` is plain TypeScript run directly by Node.js 24+ (built-in type stripping), Bun and Deno. It uses only erasable syntax and `node:` built-ins; nothing is transpiled or bundled. These runtimes load the same WASM artifacts (default and `simd128` builds) through direct `WebAssembly` APIs. `bench/scriptc/` and the shared modules it imports are additionally compiled by scriptc.
 
 ## Measurement inside one process
 
@@ -24,13 +24,14 @@ How the loops avoid common microbenchmark errors:
 
 ## Correctness checks
 
-Once timing is done, `checkEquivalence()` checks that every native path the runtime has returns exactly what the TypeScript reference returns. Those paths are Node-API, FFI in Bun and Deno, and scriptc's FFI paths. The checks themselves are shared (`bench/common/checks.ts`). A process checks every operation of the suites it measured, and only those:
+Once timing is done, `checkEquivalence()` checks that every available native or WASM path returns exactly what the TypeScript reference returns. Those paths are Node-API, FFI in Bun and Deno, WASM in all three, and scriptc's FFI paths. The checks themselves are shared (`bench/common/checks.ts`). A process checks every operation of the suites it measured, and only those:
 
 - **boundary:**
   - `noop` returning `undefined`
   - i32 overflow
   - empty arrays
   - every `sum_i32` size and an offset subarray view
+
 - **payload:**
   - `string_len` on every payload size of both variants, plus an empty string, lone and trailing surrogates, and a sliced string. The TS `string_len` is itself checked against `TextEncoder` on every string.
   - `bytes_len` and `checksum_bytes` on every payload size, an empty buffer and an offset view
@@ -40,6 +41,8 @@ Once timing is done, `checkEquivalence()` checks that every native path the runt
   - A returned string must survive a later call that overwrites the native buffer, so it cannot alias native memory.
   - `return_bytes` at every size plus 0, compared byte for byte with the TS result. Each must be a `Uint8Array` at offset 0 that owns a whole `ArrayBuffer` of exactly its size (not a view into a pool or into native memory), and two results must be independent.
   - Every row strategy at every count plus 0, compared field by field with the TS rows, including property order.
+
+For WASM, the boundary check covers both builds, with the same copy into linear memory as the `copy` paths.
 
 A process that measured payload cases generates and scans the 16 MiB payloads, which takes about 0.7–1 s; other processes skip that. All of this runs after timing and is not measured.
 
@@ -61,6 +64,27 @@ The check runs *after* timing on purpose. Calling the functions first with overf
 - the two medians differ by more than 5%.
 
 A divergent case must be reported with both numbers. Those rows are a finding about the runtime, not noise.
+
+### Canonical order is part of the shared-process protocol
+
+In a shared process, the cases run in **canonical order**:
+
+- suite by suite;
+- within a suite, operation by operation (and size by size);
+- all paths of one operation and size together, in a fixed sequence: `ts`, then `napi`, `ffi`, then WASM.
+
+Because earlier cases shape how later ones are compiled, this order is part of what a shared-process result means, not just code organisation. A path placed elsewhere would run after a different history than the paths it is compared with. `environment.json → methodology.cases` records the canonical list, and `tests/wasm.test.ts` checks that WASM paths sit with their operation.
+
+Before this rule was enforced, the WASM cases ran after the whole payload and return suites. Shared-process WASM results recorded in that state are not comparable with the other paths and have been withdrawn (see [findings](findings.md#webassembly)).
+
+### Process groups
+
+Some diagnostics need the engine started with different flags, currently `wasm.no-inline` (V8 with JS→WASM inlining disabled; see [wasm.md](wasm.md)). Their cases belong to a separate **process group**, and a process only ever runs cases of one group:
+
+- a fresh process per case uses its case's group;
+- a shared process exists per runtime *and group*.
+
+So a flag never changes what another case measures. `bench/run.ts --process-group` selects the group, and `environment.json → methodology.processGroupCommands` records the exact commands. Each result records `process.processGroup`, the `v8Flags` requested, and whether they were verified inside the process: `true`, or `null` where the runtime cannot show them (Deno's `--v8-flags`).
 
 Within each repetition, `--order shuffle` (the default) randomly permutes all units across runtimes, cases and isolation modes. The permutation comes from a seeded PRNG (mulberry32), so `--seed` from `environment.json` reproduces the schedule exactly. Shuffling stops slow drifts (temperature, background load, turbo headroom) from always landing on the same runtime or case. Every result records its `run` and `sequence` (position in the schedule), so order effects can be analysed afterwards.
 
@@ -137,7 +161,8 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
   - `options`: warmup, samples, sample-ms
   - `conditions`: warnings and `officialCriteriaMet`
   - `failedUnits`
-  - `native`: path and SHA-256 of the Node-API addon and the C ABI library that were measured. When scriptc ran, `native.scriptc` adds the compiler version, the build command, and the SHA-256 of the executable, static archive and FFI manifest.
+  - `native`: path, byte size and SHA-256 of the Node-API addon and the C ABI library that were measured. When scriptc ran, `native.scriptc` adds the compiler version, the build command, and the byte size and SHA-256 of the executable, static archive and FFI manifest.
+  - `wasm`: the WASM target and `rustc -vV`, and for each build (`default`, `simd128`) the exact release Cargo command, effective `RUSTFLAGS`, and artifact path, byte size and SHA-256. It is null for a scriptc-only run, or when the target is not installed.
 - `<runtime>.json` (schema 2, including `scriptc.json`)
   - `process.versions` as the runtime reports it (empty for scriptc, whose compiler version is in `environment.json`), the `timer` and options
   - one entry per case per run:

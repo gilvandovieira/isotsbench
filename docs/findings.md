@@ -7,8 +7,10 @@ Observations from development runs on one machine. They explain methodological c
 Cost profiles observed so far. The sections below give the numbers.
 
 - **Boundary cost varies by binding and runtime.** A call through Bun or Deno FFI costs 1–3 ns; Node-API costs 7–45 ns depending on the runtime. See [Boundary](#boundary-node-api-and-ffi).
-- **Past about 1M elements, the binding no longer matters.** Every native path runs `sum_i32` over 10^6 elements in about 60 µs.
-- **Buffers cross without copying.** Handing over a `Uint8Array` costs the same at 16 B and at 16 MiB on every native path.
+- **Past about 1M elements, borrowed native bindings converge.** Node-API and FFI run `sum_i32` over 10^6 elements in about 60 µs.
+- **Node-API and FFI borrow input buffers.** Handing over a `Uint8Array` costs the same at 16 B and at 16 MiB on those paths.
+- **The optimizer can remove the boundary.** V8 inlines a trivial JS→WASM call, so `noop/wasm.inlineable` costs the same as an empty loop. With inlining disabled, the call costs 2.7–3.0 ns. See [WebAssembly](#webassembly).
+- **WASM's array penalty is transfer plus code generation.** At 10^6 elements, copying into linear memory costs 100–145 µs per call. The default (non-SIMD) build's sum costs more than that; built with `simd128`, the resident sum comes within 1.1–1.4× of native.
 - **Strings have a cost profile of their own.** ASCII ingress runs at roughly memory speed, but mixed UTF-8 is no faster than counting bytes in JS, and in Node and Deno never beat it.
 - **Returning structured data is where native paths lose.** Building rows as JS objects through Node-API is 30–60× slower than building them in JS in Node and Deno. Packed records decoded in JS are 3–5× faster than that, but still slower than plain JS at every size.
 - **V8 results can depend on JIT history.** Some pure-TS loops differ by up to about 10× between a fresh process and a shared one, which is why official runs report both.
@@ -221,6 +223,21 @@ All values are medians of 3 fresh-process runs.
   - The divergence table flagged 20 cases, among them Deno `return_bytes/ts` at 64 KiB and 16 MiB. Fresh-process runs of the latter ranged from 7.3 to 19.3 ms, compared with 7.0 ms shared.
   - Allocation-heavy cases are the most sensitive to GC timing and JIT history.
 
+### Repetitions
+
+Two later official-profile executions of the boundary and return suites (`2026-09-29T01-33-33-823Z` and `2026-09-29T01-55-09-419Z`) had identical settings: `--cpus 8,10 --seed 20260929`, 3 runs, both modes, 759 processes each, no failed units, `powersave` and turbo on. In both, the return paths kept the direction above:
+
+- **`return_bytes` at 16 MiB** was far cheaper through native code than in TS (fresh / shared):
+  - Node `napi`: 0.118× / 0.115× TS
+  - Bun `ffi`: 0.212× / 0.221× TS
+  - Deno `napi`: 0.083× / 0.220× TS
+- **At 10k rows, the packed paths stayed slower than TS** (fresh / shared):
+  - Node `napi.packed`: 6.79× / 10.20× TS
+  - Bun `ffi.packed`: 1.94× / 2.75× TS
+  - Deno `napi.packed`: 7.23× / 7.11× TS
+
+Across the two executions, 167 of 500 mode/case groups exceeded 5% spread. The return cases in these runs ran in canonical order, before the misplaced WASM cases, so these results are valid.
+
 ## scriptc
 
 One official-profile run of scriptc alone, every suite it supports (`--official --cpus 8,10 --runtimes scriptc`): `results/raw/2026-09-28T23-49-59-309Z`.
@@ -260,3 +277,68 @@ All values are medians of 3 fresh-process runs. `ts` is TypeScript compiled ahea
 
   So the native share grows. `checksum_bytes` through FFI takes 0.24–0.25× the compiled TS time at every size from 1 KiB.
 - **Stable.** Only 8 of 158 mode/case results exceeded 5% run-to-run spread, and one case diverged between isolation modes: `string_len/ts/ascii/16777216`, shared 1.12× fresh. Without a JIT, a fresh process and a shared one run the same machine code, as expected.
+
+## WebAssembly
+
+One official-profile run of the boundary suite: `results/raw/2026-09-29T08-44-48-230Z`.
+
+- Command: `--official --cpus 8,10 --runtimes node,bun,deno --suite boundary --seed 20260929`.
+- 3 runs, both modes, 513 processes, no failed units.
+- `powersave` and turbo still on, so it is not an official result.
+
+It includes every WASM path, in canonical order, and the `wasm-no-inline` process group. Values are medians of 3 per-run medians, fresh process per case unless stated. Shared-process values agree within about 6%, except the known V8 `sum_i32/ts` rows and some Bun WASM sums (see below).
+
+### A WASM call can disappear
+
+| Case | Node | Deno | Bun |
+| --- | ---: | ---: | ---: |
+| `noop/ts` | 0.28 ns | 0.28 ns | 0.14 ns |
+| `noop/wasm.inlineable` | 0.28 ns | 0.28 ns | 1.36 ns |
+| `noop/wasm.no-inline` | 3.01 ns | 2.73 ns | – |
+| `add_i32/wasm.inlineable` | 1.54 ns | 1.39 ns | 1.13 ns |
+| `add_i32/wasm.no-inline` | 3.36 ns | 2.80 ns | – |
+| `noop/napi` | 6.87 ns | 7.35 ns | 30.7 ns |
+| `noop/ffi` | – | 2.33 ns | 0.89 ns |
+
+- **In Node.js and Deno, V8 inlines a trivial WASM call into the calling JavaScript.** `noop/wasm.inlineable` costs exactly what the empty TS loop costs, so there is no boundary left to measure. This is how applications run by default.
+- **With inlining disabled, a real JS→WASM call costs 2.7–3.0 ns.** That is below Node-API in the same runtimes (6.9–7.4 ns) and close to Deno's FFI (2.3 ns).
+- **In Bun, the default WASM call costs 1.1–1.4 ns**, near its FFI. Whether JSC inlines it is not established, and there is no switch to test it.
+
+### The sum: transfer and code generation
+
+At 10^6 elements:
+
+| Path | Node | Bun | Deno |
+| --- | ---: | ---: | ---: |
+| `ts` (fresh / shared) | 3.67 ms / 568 µs | 224 / 228 µs | 4.19 ms / 504 µs |
+| `napi` | 62.8 µs | 64.1 µs | 63.5 µs |
+| `ffi` | – | 66.4 µs | 64.5 µs |
+| `wasm.copy` | 371 µs | 283 µs | 373 µs |
+| `wasm.resident` | 237 µs | 183 µs | 227 µs |
+| `wasm.simd128.copy` | 223 µs | 237 µs | 224 µs |
+| `wasm.simd128.resident` | 70.5 µs | 88.9 µs | 75.5 µs |
+
+- **The transfer** (`copy − resident`) costs 100–145 µs per call: the `Int32Array.set` of 4 MB into linear memory.
+- **The default build's sum is scalar.** Built with `simd128`, the same sum on resident data is 2.1–3.4× faster (237 → 70.5 µs in Node, 183 → 88.9 µs in Bun, 227 → 75.5 µs in Deno). That brings it within 1.1–1.4× of the native Rust paths.
+- **The WASM penalty against Node-API and FFI is therefore transfer plus code generation, not the copy alone.** With the default build, the sum is the larger part (61–64% of `wasm.copy` in Node and Deno, 65% in Bun). With `simd128`, the copy dominates.
+- An earlier copy-only / sum-only / copy+sum decomposition outside the harness agreed. At 10^6 elements the copy took 152–157 µs, the default sum 163–256 µs, and the `simd128` sum 70–88 µs.
+
+Break-even against each runtime's TS (fresh processes; shared was the same except where noted):
+
+| Path | Node | Bun | Deno |
+| --- | --- | --- | --- |
+| `wasm.copy` | from 100 | never | from 100 |
+| `wasm.resident` | from 10 | from 100 | from 10 |
+| `wasm.simd128.copy` | from 100 | never (shared: from 1,000) | from 100 |
+| `wasm.simd128.resident` | from 10 | from 100 | from 10 |
+
+In Bun, JSC's TS sum (224 µs at 10^6) beats every WASM path that copies. Only resident input breaks even. In Node and Deno, the fresh-process TS sum is slowed by the known V8 JIT-history effect, which makes WASM look better in fresh processes than in shared ones. Read the break-even per mode.
+
+### Stability and divergence
+
+- 72 of 332 mode/case results exceeded 5% run-to-run spread.
+- 26 cases diverged between fresh and shared processes. Besides the known V8 `sum_i32/ts` rows, these were mostly Bun WASM sums (0.71–1.43× shared/fresh; `wasm.resident` at 10^6 elements was 153 µs shared against 183 µs fresh).
+
+### Withdrawn results
+
+Earlier WASM runs (`2026-09-29T01-11-43-837Z`, `2026-09-29T01-33-33-823Z` and `2026-09-29T01-55-09-419Z`) ran the WASM cases *after* the payload and return suites in each shared process. Their shared-process WASM results are therefore not comparable with the other paths, and are withdrawn. That includes the shared `wasm.copy`/TS ratios reported before, such as 0.641× in Node and 0.985× in Deno (see [methodology.md](methodology.md#canonical-order-is-part-of-the-shared-process-protocol)). Those runs also predate the `resident`, `simd128` and `no-inline` paths, so their fresh-process WASM numbers are superseded by the run above. Their return-path results were not affected and are kept under [Return path](#return-path).

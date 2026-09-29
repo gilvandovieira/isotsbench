@@ -1,6 +1,6 @@
 # Marshalling and ownership
 
-How data crosses each boundary, in both directions, on the Node-API and Bun/Deno FFI paths: what is copied, borrowed, converted or allocated, who owns results, and the native libraries behind them. scriptc's FFI is described in [scriptc.md](scriptc.md).
+How data crosses each boundary, in both directions, on the Node-API and Bun/Deno FFI paths: what is copied, borrowed, converted or allocated, who owns results, and the native libraries behind them. scriptc's FFI is described in [scriptc.md](scriptc.md); the separate WASM linear-memory transfer is described in [wasm.md](wasm.md).
 
 ## How data crosses each boundary
 
@@ -26,6 +26,8 @@ So all native `string_len` paths produce the same UTF-8 bytes in memory the nati
 - `ffi`: in JS just before the call, because a C function cannot receive a JS string
 
 The name `string_len` therefore means the same thing on every path: "get this string's UTF-8 bytes to native code". The `ts` baseline computes the same answer without materialising the bytes. The native/TS ratio shows what string ingress costs compared with doing the work in JS.
+
+WASM currently has no payload path. For `sum_i32/wasm.copy`, `Int32Array.set` copies the JS input into WASM linear memory on every timed call. Node-API and FFI instead borrow the JS backing store. `sum_i32/wasm.resident` measures the same sum on input already in linear memory, so the transfer can be separated from execution; see [wasm.md](wasm.md).
 
 ## Return path (native → JS)
 

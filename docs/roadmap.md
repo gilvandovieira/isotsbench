@@ -10,7 +10,10 @@ What has been built, and what is planned but not implemented. Current capabiliti
 | v0.2.0 | Methodology hardening: fresh process per case, seeded shuffle, CPU pinning, run-condition checks, run-to-run variance, official profile |
 | v0.3.0 | Plain C ABI; Bun and Deno FFI paths |
 | v0.4.0 | Payload ingress and return-path suites; suite selection |
-| unreleased | scriptc: compiled TypeScript and scriptc native FFI ([scriptc.md](scriptc.md)) |
+| v0.5.0 | scriptc: compiled TypeScript and scriptc native FFI ([scriptc.md](scriptc.md)) |
+| v0.6.0 (unreleased) | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
+
+v0.6.0 has one pinned official-profile run of the boundary suite ([findings.md](findings.md#webassembly)). It does not meet the official criteria: those need the performance governor and turbo disabled, which the benchmark runner records but cannot set.
 
 ## Planned
 
@@ -46,12 +49,12 @@ Measure `await native.addAsync(a, b)` separately from synchronous calls. Async p
 
 Results must never mix synchronous and asynchronous measurements.
 
-### WebAssembly and browsers
+### Browsers and Workers
 
-- JavaScript → WASM in Node.js, Bun, Deno and browsers
+- JavaScript → WASM in browsers (Node.js, Bun and Deno run the boundary suite already)
 - Browser: JavaScript → Worker → WASM, measured separately from JS → WASM, because a Worker adds a message, copy or transfer boundary
 
-This will add `native/wasm/` and `bench/browser/` directories.
+This will add a `bench/browser/` directory. WASM payload and return paths in the existing runtimes also remain deferred until their transfer semantics can be named and compared honestly.
 
 ### Realistic workload suite
 
