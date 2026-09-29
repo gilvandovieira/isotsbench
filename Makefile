@@ -8,7 +8,7 @@ RUNS ?=
 SUITE ?=
 SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 
-.PHONY: build test check bench bench-quick bench-official compare clean
+.PHONY: build test check bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare clean
 
 build:
 	node scripts/build.ts
@@ -21,7 +21,7 @@ test:
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
-	deno check bench/run.ts bench/scriptc/run.ts scripts/*.ts tests/wasm.test.ts
+	deno check bench/run.ts bench/scriptc/run.ts bench/browser/page.ts bench/browser/worker.ts scripts/*.ts tests/wasm.test.ts
 
 # Fresh process per case, shuffled order, one run, unpinned.
 bench:
@@ -35,6 +35,19 @@ bench-quick:
 bench-official:
 	$(if $(CPUS),,$(error set CPUS, e.g. make bench-official CPUS=8,10))
 	node scripts/bench.ts --official --cpus $(CPUS) $(SUITE_ARG) $(BENCH_ARGS)
+
+# Browsers (Chromium, Firefox): main thread and Worker, fresh browser per case, 1 run.
+bench-browser:
+	node scripts/bench-browser.ts $(BENCH_ARGS)
+
+# Smoke run: one page per browser and thread, short batches. Not for publishable numbers.
+bench-browser-quick:
+	node scripts/bench-browser.ts --isolation runtime --warmup 2 --samples 5 --sample-ms 5 $(BENCH_ARGS)
+
+# Official profile for browsers: pinned, fresh and shared pages, shuffled, 3 runs.
+bench-browser-official:
+	$(if $(CPUS),,$(error set CPUS, e.g. make bench-browser-official CPUS=8,10))
+	node scripts/bench-browser.ts --official --cpus $(CPUS) $(BENCH_ARGS)
 
 compare:
 	$(if $(RUNS),,$(error set RUNS to one or more results/raw/<run-id> directories))

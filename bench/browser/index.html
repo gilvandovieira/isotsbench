@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>isotsbench</title>
+<p>isotsbench browser runner. This page is driven by <code>scripts/bench-browser.ts</code>; see <code>docs/browser.md</code>.</p>
+<script>
+  // Tells the orchestrator the browser loaded the page, before any module is fetched.
+  fetch(`/api/started?token=${encodeURIComponent(new URLSearchParams(location.search).get("token") ?? "")}`, { method: "POST" });
+</script>
+<script type="module" src="./page.ts"></script>
+</html>
