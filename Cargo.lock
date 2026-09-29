@@ -26,3 +26,10 @@ version = "0.5.0"
 dependencies = [
  "isotsbench-core",
 ]
+
+[[package]]
+name = "isotsbench-wasm"
+version = "0.5.0"
+dependencies = [
+ "isotsbench-core",
+]
