@@ -38,6 +38,8 @@ jobs:
       # Regenerates results/normalized/, builds build/site/ and checks both,
       # including Chromium under the /isotsbench/ base path.
       - run: make site-check
+        env:
+          CHROMIUM_PATH: google-chrome
 
       - name: The committed dataset must match the regenerated one
         run: |
