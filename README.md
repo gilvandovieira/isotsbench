@@ -6,7 +6,7 @@ A native function can be much faster than JavaScript and still lose once you cou
 
 It reports **cost profiles, not winners**: absolute costs, ratios against each runtime's own TypeScript baseline, and break-even sizes.
 
-**Try it:** `make bench-quick`. It needs Rust and Node.js 24+, and uses Bun, Deno, scriptc and the `wasm32-unknown-unknown` Rust target if they are installed. `make bench-browser-quick` runs the browser and Worker paths in Chromium and Firefox. See [Quick start](#quick-start).
+**Try it:** `make bench-quick`. It needs Rust and Node.js 24.2+, and uses Bun, Deno, scriptc and the `wasm32-unknown-unknown` Rust target if they are installed. `make bench-browser-quick` runs the browser and Worker paths in Chromium and Firefox. See [Quick start](#quick-start).
 
 ## What it measures
 
@@ -69,7 +69,7 @@ Requirements:
 
 - Linux x86_64, the only verified platform
 - Rust (stable); for the WASM paths also `rustup target add wasm32-unknown-unknown` (skipped with a warning when missing)
-- Node.js 24+
+- Node.js 24.2+ (`scripts/` rely on `import.meta.main`, added in 24.2.0; on older versions `node scripts/build.ts` exits without building)
 - optionally Bun, Deno and [scriptc](https://scriptc.dev) (`npm install -g scriptc`); runtimes missing from `PATH` are skipped
 - for the browser paths, Chromium or Chrome and/or Firefox (`CHROMIUM_PATH` / `FIREFOX_PATH`, or on `PATH`), plus the WASM target
 

@@ -22,7 +22,7 @@ make compare RUNS="results/raw/<a> results/raw/<b>"
 - `--threads main,worker`: which group to run.
 - `--timeout-s N`: per-page limit (default 900 s). A page that hangs fails its unit.
 
-The WASM target is required (`rustup target add wasm32-unknown-unknown`): without the artifacts there is nothing to compare. Node.js 24+ runs the orchestrator and the local server. No npm package, browser driver or bundler is used.
+The WASM target is required (`rustup target add wasm32-unknown-unknown`): without the artifacts there is nothing to compare. Node.js 24.2+ runs the orchestrator and the local server. No npm package, browser driver or bundler is used.
 
 `make test` runs `tests/browser.test.ts` in every browser it finds and skips the others.
 

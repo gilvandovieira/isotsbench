@@ -4,7 +4,7 @@ How measurements are taken, isolated, controlled, checked and recorded. What is 
 
 ## Shared TypeScript
 
-`bench/` is plain TypeScript run directly by Node.js 24+ (built-in type stripping), Bun and Deno. It uses only erasable syntax and `node:` built-ins; nothing is transpiled or bundled. These runtimes load the same WASM artifacts (default and `simd128` builds) through direct `WebAssembly` APIs. `bench/scriptc/` and the shared modules it imports are additionally compiled by scriptc.
+`bench/` is plain TypeScript run directly by Node.js 24.2+ (built-in type stripping), Bun and Deno. It uses only erasable syntax and `node:` built-ins; nothing is transpiled or bundled. These runtimes load the same WASM artifacts (default and `simd128` builds) through direct `WebAssembly` APIs. `bench/scriptc/` and the shared modules it imports are additionally compiled by scriptc.
 
 Browsers run `bench/browser/` and the shared modules it imports. A local server strips their types with Node's `stripTypeScriptTypes` and serves them unbundled; see [Browsers and Workers](#browsers-and-workers).
 
@@ -164,7 +164,7 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
 3. `make bench-official CPUS=<list>`. This runs `--official`, which requires `--cpus`, `--isolation both`, `--order shuffle` and at least 3 runs. Keep the default harness options (warmup, samples, sample-ms) unless you are deliberately changing the methodology: some V8 results depend on how long a process runs (see [findings](findings.md#jit-history-fresh-versus-shared-processes)), so runs are only comparable with identical options.
 4. The run ends by printing either `official criteria met` or `official criteria NOT met`. The result is also stored as `conditions.officialCriteriaMet`, which is true only for the official profile with no condition warnings and no failed units.
 5. Publish the fresh-process and shared-process results side by side. In the variance table, report every `unstable` case as unstable, not as a single number. Report every case in the isolation divergence table with both numbers.
-6. To publish, commit the whole `results/raw/<run-id>/` directory.
+6. To publish, commit the whole `results/raw/<run-id>/` directory. `results/raw/*` is git-ignored, so add it with `git add -f results/raw/<run-id>`.
 
 ## Output
 
