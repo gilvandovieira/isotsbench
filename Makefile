@@ -8,7 +8,7 @@ RUNS ?=
 SUITE ?=
 SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 
-.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare normalize clean
+.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare normalize site site-serve clean
 
 build:
 	node scripts/build.ts
@@ -70,6 +70,16 @@ compare:
 # results/normalized/ from the committed official runs listed in scripts/normalize-results.ts.
 normalize:
 	node scripts/normalize-results.ts
+
+# The GitHub Pages report: site/ with its data symlink resolved, in build/site/.
+site: normalize
+	rm -rf build/site
+	cp -RL site build/site
+	rm build/site/README.md
+
+# http://127.0.0.1:8000/isotsbench/, as GitHub Pages serves it.
+site-serve: site
+	node scripts/serve-site.ts build/site
 
 clean:
 	cargo clean

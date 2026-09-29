@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>isotsbench</title>
+<meta name="description" content="">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#content" data-i18n="nav.skip"></a>
+
+<header>
+<div class="bar">
+  <a class="name" href="./">isotsbench</a>
+  <nav data-i18n-attr="aria-label:nav.site">
+    <a href="https://github.com/gilvandovieira/isotsbench" data-i18n="nav.repository"></a>
+    <a href="#evidence" data-i18n="nav.data"></a>
+  </nav>
+  <div class="lang" role="group" data-i18n-attr="aria-label:nav.language">
+    <button type="button" data-lang="en" lang="en" aria-pressed="true">EN</button>
+    <button type="button" data-lang="pt-BR" lang="pt-BR" aria-pressed="false">PT-BR</button>
+  </div>
+</div>
+
+<noscript>
+  <p class="noscript" lang="en">This page needs JavaScript to show its text. The same material is in the <a href="https://github.com/gilvandovieira/isotsbench#readme">repository's README and docs</a>.</p>
+  <p class="noscript" lang="pt-BR">Esta página precisa de JavaScript para mostrar o texto. O mesmo material está no <a href="https://github.com/gilvandovieira/isotsbench#readme">README e na documentação do repositório</a>.</p>
+</noscript>
+
+<div class="hero">
+  <p class="eyebrow" data-i18n="hero.eyebrow"></p>
+  <h1 data-i18n="hero.title"></h1>
+  <p class="lede" data-i18n="hero.lede"></p>
+  <dl class="meta">
+    <dt data-i18n="hero.evidence"></dt><dd data-i18n="hero.evidenceValue"></dd>
+    <dt data-i18n="hero.machine"></dt><dd data-i18n="hero.machineValue"></dd>
+    <dt data-i18n="hero.code"></dt><dd data-i18n="hero.codeValue"></dd>
+    <dt data-i18n="hero.measured"></dt><dd><time datetime="2026-09-29" data-date></time></dd>
+  </dl>
+</div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-labelledby="toc-title">
+    <div>
+      <h2 id="toc-title" data-i18n="nav.contents"></h2>
+      <ol>
+        <li><a href="#measured" data-i18n="measured.short"></a></li>
+        <li><a href="#targets" data-i18n="targets.short"></a></li>
+        <li><a href="#glance" data-i18n="glance.short"></a></li>
+        <li><a href="#boundary" data-i18n="boundary.short"></a></li>
+        <li><a href="#data-shape" data-i18n="dataShape.short"></a></li>
+        <li><a href="#wasm" data-i18n="wasm.short"></a></li>
+        <li><a href="#workers" data-i18n="workers.short"></a></li>
+        <li><a href="#jit-history" data-i18n="jit.short"></a></li>
+        <li><a href="#methodology" data-i18n="methodology.short"></a></li>
+        <li><a href="#evidence" data-i18n="evidence.short"></a></li>
+      </ol>
+    </div>
+  </nav>
+
+  <main id="content">
+
+    <section id="measured" aria-labelledby="measured-h">
+      <h2 id="measured-h" data-i18n="measured.title"></h2>
+      <p class="takeaway" data-i18n="measured.lede"></p>
+      <div class="table-wrap" tabindex="0" role="region" data-i18n-attr="aria-label:measured.tableLabel">
+        <table>
+          <thead><tr><th scope="col" data-i18n="measured.suite"></th><th scope="col" data-i18n="measured.operations"></th><th scope="col" data-i18n="measured.isolates"></th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><code>boundary</code></th><td data-i18n="measured.boundaryOps"></td><td data-i18n="measured.boundaryIsolates"></td></tr>
+            <tr><th scope="row"><code>payload</code></th><td data-i18n="measured.payloadOps"></td><td data-i18n="measured.payloadIsolates"></td></tr>
+            <tr><th scope="row"><code>return</code></th><td data-i18n="measured.returnOps"></td><td data-i18n="measured.returnIsolates"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <details>
+        <summary data-i18n="measured.pathsSummary"></summary>
+        <p data-i18n="measured.pathsIntro"></p>
+        <ul data-i18n-list="measured.paths"></ul>
+      </details>
+    </section>
+
+    <section id="targets" aria-labelledby="targets-h">
+      <h2 id="targets-h" data-i18n="targets.title"></h2>
+      <p class="takeaway" data-i18n="targets.lede"></p>
+      <div class="table-wrap" tabindex="0" role="region" data-i18n-attr="aria-label:targets.tableLabel">
+        <table class="targets">
+          <thead><tr><th scope="col" data-i18n="targets.target"></th><th scope="col" data-i18n="targets.version"></th><th scope="col" data-i18n="targets.paths"></th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://nodejs.org/">Node.js</a></td><td>24.21.0</td><td><code>ts</code>, <code>napi</code>, <code>wasm</code></td></tr>
+            <tr><td><a href="https://bun.com/">Bun</a></td><td>1.4.2</td><td><code>ts</code>, <code>napi</code>, <code>ffi</code> (<code>bun:ffi</code>), <code>wasm</code></td></tr>
+            <tr><td><a href="https://deno.com/">Deno</a></td><td>2.9.7</td><td><code>ts</code>, <code>napi</code>, <code>ffi</code> (<code>Deno.dlopen</code>), <code>wasm</code></td></tr>
+            <tr><td><a href="https://scriptc.dev">scriptc</a></td><td>0.1.7</td><td data-i18n="targets.scriptcPaths"></td></tr>
+            <tr><td><a href="https://webassembly.org/">WebAssembly</a></td><td data-i18n="targets.wasmVersion"></td><td data-i18n="targets.wasmPaths"></td></tr>
+            <tr><td><a href="https://www.chromium.org/">Chromium</a></td><td>Chrome for Testing 153 (V8 15.3)</td><td><code>ts</code>, <code>wasm</code>, <code>worker.*</code></td></tr>
+            <tr><td><a href="https://www.firefox.com/">Firefox</a></td><td>156.0.1</td><td><code>ts</code>, <code>wasm</code>, <code>worker.*</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <details>
+        <summary data-i18n="targets.gapsSummary"></summary>
+        <ul data-i18n-list="targets.gaps"></ul>
+      </details>
+    </section>
+
+    <section id="glance" aria-labelledby="glance-h">
+      <h2 id="glance-h" data-i18n="glance.title"></h2>
+      <p data-i18n="glance.lede"></p>
+      <ol class="glance">
+        <li><strong data-i18n="glance.items.0.claim"></strong><p data-i18n="glance.items.0.detail"></p><a href="#boundary" data-i18n="glance.items.0.link"></a></li>
+        <li><strong data-i18n="glance.items.1.claim"></strong><p data-i18n="glance.items.1.detail"></p><a href="#boundary" data-i18n="glance.items.1.link"></a></li>
+        <li><strong data-i18n="glance.items.2.claim"></strong><p data-i18n="glance.items.2.detail"></p><a href="#data-shape" data-i18n="glance.items.2.link"></a></li>
+        <li><strong data-i18n="glance.items.3.claim"></strong><p data-i18n="glance.items.3.detail"></p><a href="#wasm" data-i18n="glance.items.3.link"></a></li>
+        <li><strong data-i18n="glance.items.4.claim"></strong><p data-i18n="glance.items.4.detail"></p><a href="#workers" data-i18n="glance.items.4.link"></a></li>
+        <li><strong data-i18n="glance.items.5.claim"></strong><p data-i18n="glance.items.5.detail"></p><a href="#jit-history" data-i18n="glance.items.5.link"></a></li>
+      </ol>
+    </section>
+
+    <section id="boundary" aria-labelledby="boundary-h">
+      <h2 id="boundary-h" data-i18n="boundary.title"></h2>
+      <p class="takeaway" data-i18n="boundary.lede"></p>
+      <figure class="viz" data-chart="boundary"></figure>
+      <ul data-i18n-list="boundary.points"></ul>
+    </section>
+
+    <section id="data-shape" aria-labelledby="data-shape-h">
+      <h2 id="data-shape-h" data-i18n="dataShape.title"></h2>
+      <p class="takeaway" data-i18n="dataShape.lede"></p>
+      <figure class="viz" data-chart="dataShape"></figure>
+      <div class="patterns">
+        <article class="pattern" aria-labelledby="pattern-0">
+          <h3 id="pattern-0" data-i18n="dataShape.patterns.0.title"></h3>
+          <pre tabindex="0"><code data-i18n-code="dataShape.patterns.0.code"></code></pre>
+          <p><strong data-i18n="dataShape.measured"></strong> <span data-i18n="dataShape.patterns.0.measured" data-values></span></p>
+          <div class="borrowed" data-borrowed></div>
+          <p><strong data-i18n="dataShape.implication"></strong> <span data-i18n="dataShape.patterns.0.implication"></span></p>
+        </article>
+        <article class="pattern" aria-labelledby="pattern-1">
+          <h3 id="pattern-1" data-i18n="dataShape.patterns.1.title"></h3>
+          <pre tabindex="0"><code data-i18n-code="dataShape.patterns.1.code"></code></pre>
+          <p><strong data-i18n="dataShape.measured"></strong> <span data-i18n="dataShape.patterns.1.measured" data-values></span></p>
+          <p><strong data-i18n="dataShape.implication"></strong> <span data-i18n="dataShape.patterns.1.implication"></span></p>
+        </article>
+        <article class="pattern" aria-labelledby="pattern-2">
+          <h3 id="pattern-2" data-i18n="dataShape.patterns.2.title"></h3>
+          <pre tabindex="0"><code data-i18n-code="dataShape.patterns.2.code"></code></pre>
+          <p><strong data-i18n="dataShape.measured"></strong> <span data-i18n="dataShape.patterns.2.measured" data-values></span></p>
+          <p><strong data-i18n="dataShape.implication"></strong> <span data-i18n="dataShape.patterns.2.implication"></span></p>
+        </article>
+        <article class="pattern" aria-labelledby="pattern-3">
+          <h3 id="pattern-3" data-i18n="dataShape.patterns.3.title"></h3>
+          <pre tabindex="0"><code data-i18n-code="dataShape.patterns.3.code"></code></pre>
+          <p><strong data-i18n="dataShape.measured"></strong> <span data-i18n="dataShape.patterns.3.measured" data-values></span></p>
+          <p><strong data-i18n="dataShape.implication"></strong> <span data-i18n="dataShape.patterns.3.implication"></span></p>
+        </article>
+      </div>
+      <p class="deeper" data-i18n="dataShape.deeper"></p>
+    </section>
+
+    <section id="wasm" aria-labelledby="wasm-h">
+      <h2 id="wasm-h" data-i18n="wasm.title"></h2>
+      <p class="takeaway" data-i18n="wasm.lede"></p>
+      <figure class="viz" data-chart="wasmSum"></figure>
+      <ul data-i18n-list="wasm.points"></ul>
+      <figure class="viz" data-chart="wasmSplit"></figure>
+      <p class="deeper" data-i18n="wasm.deeper"></p>
+    </section>
+
+    <section id="workers" aria-labelledby="workers-h">
+      <h2 id="workers-h" data-i18n="workers.title"></h2>
+      <p class="takeaway" data-i18n="workers.lede"></p>
+      <figure class="viz" data-chart="workers"></figure>
+      <ul data-i18n-list="workers.points"></ul>
+      <p data-i18n="workers.caveat"></p>
+      <p class="deeper" data-i18n="workers.deeper"></p>
+    </section>
+
+    <section id="jit-history" aria-labelledby="jit-h">
+      <h2 id="jit-h" data-i18n="jit.title"></h2>
+      <p class="takeaway" data-i18n="jit.lede"></p>
+      <figure class="viz" data-chart="jit"></figure>
+      <ul data-i18n-list="jit.points"></ul>
+      <p class="deeper" data-i18n="jit.deeper"></p>
+    </section>
+
+    <section id="methodology" aria-labelledby="methodology-h">
+      <h2 id="methodology-h" data-i18n="methodology.title"></h2>
+      <p class="takeaway" data-i18n="methodology.lede"></p>
+      <ul data-i18n-list="methodology.points"></ul>
+      <details>
+        <summary data-i18n="methodology.readingSummary"></summary>
+        <ul data-i18n-list="methodology.reading"></ul>
+      </details>
+      <details>
+        <summary data-i18n="methodology.caveatsSummary"></summary>
+        <ul data-i18n-list="methodology.caveats"></ul>
+      </details>
+      <details>
+        <summary data-i18n="methodology.claimsSummary"></summary>
+        <ul data-i18n-list="methodology.claims"></ul>
+      </details>
+      <p class="deeper" data-i18n="methodology.deeper"></p>
+    </section>
+
+    <section id="evidence" aria-labelledby="evidence-h">
+      <h2 id="evidence-h" data-i18n="evidence.title"></h2>
+      <p class="takeaway" data-i18n="evidence.lede"></p>
+      <dl class="links">
+        <div>
+          <dt data-i18n="evidence.repository"></dt>
+          <dd><a href="https://github.com/gilvandovieira/isotsbench">github.com/gilvandovieira/isotsbench</a>: <span data-i18n="evidence.repositoryText"></span></dd>
+        </div>
+        <div>
+          <dt data-i18n="evidence.docs"></dt>
+          <dd>
+            <a href="https://github.com/gilvandovieira/isotsbench/blob/main/docs/findings.md#official-results" data-i18n="evidence.docsFindings"></a> ·
+            <a href="https://github.com/gilvandovieira/isotsbench/blob/main/docs/benchmarks.md" data-i18n="evidence.docsBenchmarks"></a> ·
+            <a href="https://github.com/gilvandovieira/isotsbench/blob/main/docs/methodology.md" data-i18n="evidence.docsMethodology"></a> ·
+            <a href="https://github.com/gilvandovieira/isotsbench/blob/main/docs/limitations.md" data-i18n="evidence.docsLimitations"></a>
+          </dd>
+        </div>
+        <div>
+          <dt data-i18n="evidence.raw"></dt>
+          <dd>
+            <ul class="plain">
+              <li><a href="https://github.com/gilvandovieira/isotsbench/tree/321bec3c772190cc57b42d810442efdda640d180/results/raw/2026-09-29T10-24-40-196Z"><code>2026-09-29T10-24-40-196Z</code></a>: <span data-i18n="evidence.rawRuntimes"></span></li>
+              <li><a href="https://github.com/gilvandovieira/isotsbench/tree/321bec3c772190cc57b42d810442efdda640d180/results/raw/2026-09-29T11-49-48-358Z"><code>2026-09-29T11-49-48-358Z</code></a>: <span data-i18n="evidence.rawBrowsers"></span></li>
+            </ul>
+            <span data-i18n="evidence.rawNote"></span>
+          </dd>
+        </div>
+        <div>
+          <dt data-i18n="evidence.normalized"></dt>
+          <dd><a href="https://github.com/gilvandovieira/isotsbench/tree/main/results/normalized"><code>results/normalized/</code></a>: <span data-i18n="evidence.normalizedText"></span></dd>
+        </div>
+        <div>
+          <dt data-i18n="evidence.reproduce"></dt>
+          <dd><pre tabindex="0"><code>make setup CPUS=8,10 &amp;&amp; make bench-official CPUS=8,10; make teardown</code></pre><span data-i18n="evidence.reproduceNote"></span></dd>
+        </div>
+      </dl>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p data-i18n="footer.text"></p>
+</footer>
+</body>
+</html>

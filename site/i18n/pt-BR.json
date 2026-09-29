@@ -1,0 +1,344 @@
+{
+  "meta": {
+    "title": "isotsbench · Quanto custa atravessar a fronteira do TypeScript?",
+    "description": "Perfis de custo de chamar código nativo a partir de TypeScript no Node.js, Bun, Deno, scriptc, WebAssembly e Workers de navegador, a partir de execuções oficiais publicadas."
+  },
+  "nav": {
+    "skip": "Pular para o conteúdo",
+    "site": "Site",
+    "repository": "Repositório",
+    "data": "Dados",
+    "language": "Idioma",
+    "contents": "Conteúdo"
+  },
+  "hero": {
+    "eyebrow": "isotsbench v0.7.0 · relatório de benchmark",
+    "title": "Quanto custa atravessar a fronteira do TypeScript?",
+    "lede": "Uma função nativa pode ser mais rápida que JavaScript e ainda assim perder quando se conta o custo de chamá-la: entrar no código nativo, converter argumentos, copiar strings e buffers, construir resultados. O isotsbench mede esse custo entre runtimes, bindings, WebAssembly e Workers de navegador. Ele reporta **perfis de custo, não vencedores**.",
+    "evidence": "Evidência",
+    "evidenceValue": "2 execuções oficiais, publicadas com todas as amostras brutas",
+    "machine": "Máquina",
+    "machineValue": "Intel Core i7-12700H, Linux x86_64, turbo desligado, CPUs fixadas",
+    "code": "Código",
+    "codeValue": "commit `da569f4`, árvore limpa",
+    "measured": "Medido em"
+  },
+  "measured": {
+    "title": "O que foi medido",
+    "short": "O que foi medido",
+    "lede": "Microbenchmarks síncronos que isolam a fronteira: sem E/S, sem banco de dados, sem async. Todo caminho nativo chama o mesmo núcleo em Rust, e todo resultado é conferido contra uma referência em TypeScript depois da medição.",
+    "suite": "Suíte",
+    "operations": "Operações",
+    "isolates": "Isola",
+    "boundaryOps": "`noop`, `add_i32`, `sum_i32` (1 a 10⁶ elementos)",
+    "boundaryIsolates": "a chamada em si, conversão de escalares, ponto de equilíbrio com trabalho",
+    "payloadOps": "`string_len` (ASCII, UTF-8), `bytes_len`, `checksum_bytes`, de 16 B a 16 MiB",
+    "payloadIsolates": "levar strings e buffers para o código nativo",
+    "returnOps": "`return_f64`, `return_string`, `return_bytes`, `return_rows`",
+    "returnIsolates": "trazer de volta escalares, strings, buffers e objetos de linha",
+    "pathsSummary": "Caminhos de execução e ids de caso",
+    "pathsIntro": "O segmento de caminho de um id de caso diz o que é medido: `op/path[/variant][/size]`, por exemplo `sum_i32/wasm.copy/1000`. Caminhos com semânticas diferentes nunca são misturados.",
+    "paths": [
+      "`ts`: a referência em TypeScript, compilada por JIT (compilada antecipadamente no scriptc).",
+      "`napi`: um addon Node-API puro, o mesmo arquivo no Node.js, Bun e Deno.",
+      "`ffi`: uma ABI C simples via `bun:ffi`, `Deno.dlopen` ou a FFI do scriptc.",
+      "`wasm.*`: WebAssembly sem wasm-bindgen; os sufixos nomeiam a chamada, a entrada e o build.",
+      "`worker.*`: uma ida e volta até um Worker dedicado no navegador, com sufixo para a forma de mover a entrada."
+    ],
+    "tableLabel": "Suítes e operações"
+  },
+  "targets": {
+    "title": "Alvos",
+    "short": "Alvos",
+    "lede": "Quatro runtimes de servidor, dois navegadores e WebAssembly rodando dentro de ambos.",
+    "target": "Alvo",
+    "version": "Versão medida",
+    "paths": "Caminhos",
+    "scriptcPaths": "`ts` compilado, `ffi` (parcial)",
+    "wasmVersion": "builds padrão e `simd128`",
+    "wasmPaths": "no Node.js, Bun, Deno e nos dois navegadores",
+    "gapsSummary": "Por que alguns caminhos faltam",
+    "gaps": [
+      "O Node.js não tem FFI estável.",
+      "O scriptc não tem motor JavaScript, portanto não tem Node-API; sua FFI cobre parte da matriz.",
+      "WebAssembly cobre apenas a suíte boundary; seus caminhos de payload e return foram adiados.",
+      "Navegadores não têm Node-API nem FFI, e rodam apenas a suíte boundary."
+    ],
+    "tableLabel": "Alvos, versões e caminhos"
+  },
+  "glance": {
+    "title": "Resultados em resumo",
+    "short": "Resultados em resumo",
+    "lede": "Seis observações das execuções oficiais. Cada uma leva à seção com as medições por trás dela.",
+    "items": [
+      {
+        "claim": "A chamada em si é pequena: nanossegundos, e o binding decide quantos.",
+        "detail": "Em cada runtime que a tem, a FFI foi a chamada real mais barata; Node-API custou várias vezes mais, e mais ainda no Bun. No Node.js e no Deno, o V8 fez inline de uma chamada WebAssembly trivial até não sobrar nada para medir.",
+        "link": "Custo da fronteira"
+      },
+      {
+        "claim": "Com trabalho suficiente por trás, o binding deixa de importar.",
+        "detail": "Com um milhão de elementos, toda soma via Node-API e FFI levou praticamente o mesmo tempo, qualquer que fosse o custo da chamada.",
+        "link": "Custo da fronteira"
+      },
+      {
+        "claim": "A forma dos dados importa mais que JS vs nativo.",
+        "detail": "Strings ASCII atravessam barato; via Node-API, UTF-8 misto nunca superou o TypeScript no Node.js nem no Deno. Devolver linhas como objetos JavaScript via Node-API foi mais lento do que construí-las em TypeScript em todos os tamanhos medidos.",
+        "link": "Forma dos dados"
+      },
+      {
+        "claim": "WebAssembly paga pela transferência e pela geração de código.",
+        "detail": "Copiar a entrada para a memória linear e o código escalar do build padrão respondem, cada um, por uma parte comparável da diferença até o nativo. Com `simd128` e entrada residente, o WebAssembly chega perto do nativo.",
+        "link": "WebAssembly"
+      },
+      {
+        "claim": "Uma ida e volta a um Worker custa microssegundos antes de qualquer dado se mover.",
+        "detail": "Isso é milhares de vezes uma chamada na thread principal. Para entradas grandes, a forma de levar a entrada ao Worker importa mais do que o que roda lá.",
+        "link": "Workers"
+      },
+      {
+        "claim": "O histórico do JIT do V8 pode mudar um resultado várias vezes.",
+        "detail": "O mesmo laço TypeScript pode rodar várias vezes mais devagar em um processo novo do que em um que já rodou outros casos. Os dois são medidos e reportados, nunca agregados.",
+        "link": "Novo vs compartilhado"
+      }
+    ]
+  },
+  "boundary": {
+    "title": "Custo da fronteira",
+    "short": "Custo da fronteira",
+    "lede": "O custo de uma chamada sem trabalho e sem dados, `noop`, é o piso de cada binding. O `noop` em TypeScript vira um laço vazio por inline, então aqui importa o tempo nativo absoluto, não uma razão contra o TypeScript.",
+    "points": [
+      "FFI e uma chamada WebAssembly real custaram poucos nanossegundos; Node-API custou mais, e quanto dependeu muito do runtime.",
+      "Trabalho proporcional à entrada, como em `sum_i32`, acaba escondendo a travessia. O **ponto de equilíbrio** é o menor tamanho medido a partir do qual o nativo supera o TypeScript daquele runtime em todos os tamanhos maiores.",
+      "Argumentos escalares somam custo de conversão em alguns caminhos, como o `add_i32` do scriptc."
+    ]
+  },
+  "dataShape": {
+    "title": "A forma dos dados importa mais que JS vs nativo",
+    "short": "Forma dos dados",
+    "lede": "Se o código nativo vence depende menos da linguagem do outro lado da fronteira do que do que a atravessa: um buffer emprestado, uma string de um byte, uma string de dois bytes, um buffer novo ou um objeto JavaScript por linha.",
+    "measured": "Medido.",
+    "implication": "Para o design de APIs.",
+    "patterns": [
+      {
+        "title": "Computação nativa sobre memória emprestada",
+        "code": "// Os bytes de quem chama ficam onde estão; o código nativo os lê no lugar.\nconst bytes = new Uint8Array(16 * 1024 * 1024);\nconst hash = native.checksum(bytes);   // uma chamada, nenhuma cópia",
+        "measured": "Entregar um buffer ao Node-API ou à FFI levou praticamente o mesmo tempo com 16 B e com 16 MiB: nos seis tamanhos, o tempo de nenhum caminho variou mais que {borrowed}.",
+        "implication": "Passe buffers como estão e dê ao código nativo o trabalho inteiro em uma chamada. Entregar um buffer emprestado custa o mesmo em qualquer tamanho, então o que se acumula é o número de chamadas, não a quantidade de dados."
+      },
+      {
+        "title": "Copiar um array para a memória linear do WebAssembly",
+        "code": "// O WebAssembly não lê um array JS no lugar: é preciso copiá-lo para a memória linear.\nconst ptr = wasm.alloc(data.byteLength);\nnew Int32Array(wasm.memory.buffer, ptr, data.length).set(data);   // a cada chamada\nconst sum = wasm.sum_i32(ptr, data.length);",
+        "measured": "Com 10⁶ elementos, só a cópia levou {copy} por chamada, enquanto a soma nativa inteira levou {native}.",
+        "implication": "Mantenha na memória linear os dados com que o WebAssembly trabalha e copie-os uma vez. Uma API que recebe um array JavaScript novo a cada chamada paga a cópia toda vez."
+      },
+      {
+        "title": "Devolver um buffer grande de bytes",
+        "code": "// O código nativo aloca e preenche um buffer; o JS recebe um único Uint8Array.\nconst image = native.render(width, height);   // 16 MiB, um objeto",
+        "measured": "Devolver um buffer novo de 16 MiB via Node-API foi {bytesOut} mais rápido do que preenchê-lo em TypeScript, entre runtimes e nos dois modos de processo.",
+        "implication": "Devolva resultados em massa como um único typed array ou buffer. Resultados pequenos se comportam de outro jeito: um buffer novo de 16 bytes custou mais via Node-API do que em TypeScript no Node.js e no Bun."
+      },
+      {
+        "title": "Devolver milhares de objetos JavaScript",
+        "code": "// O código nativo constrói um objeto JS por linha, 10.000 vezes.\nconst rows = native.query(sql);         // [{ id, score, active, name }, …]\n\n// Empacotado: volta um buffer, decodificado em objetos no JS.\nconst packed = native.queryPacked(sql);",
+        "measured": "Devolver 10.000 linhas como objetos via Node-API levou {objects} o tempo de construí-las em TypeScript; registros empacotados decodificados em JavaScript levaram {packed}. Nenhuma estratégia nativa de linhas superou o TypeScript em nenhum tamanho medido, de 1 a 10.000 linhas.",
+        "implication": "Muitos objetos JavaScript pequenos foram a forma mais cara medida, e um buffer empacotado reduziu esse custo sem superar o TypeScript. Quando as linhas precisam virar objetos JavaScript, construí-las em TypeScript foi mais rápido aqui; caso contrário, mantenha-as no lado nativo e devolva só o que quem chama precisa."
+      }
+    ],
+    "deeper": "Como cada binding copia, empresta ou aloca (em inglês): [marshalling.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/marshalling.md)."
+  },
+  "wasm": {
+    "title": "WebAssembly: transferência e geração de código",
+    "short": "WebAssembly",
+    "lede": "Node-API e FFI emprestam o array de quem chama; WebAssembly precisa antes copiá-lo para a memória linear. Sua penalidade é essa cópia mais o código que o build padrão gera, e as duas são medidas separadamente.",
+    "points": [
+      "`wasm.copy` copia a entrada a cada chamada; `wasm.resident` copia uma vez, fora da medição. A diferença entre eles é a transferência.",
+      "A soma do build padrão é escalar, enquanto o Rust nativo é autovetorizado. `simd128` é o mesmo código compilado com SIMD, como caminho separado.",
+      "`wasm.inlineable` é a chamada padrão do motor, que o V8 pode eliminar por inline; `wasm.no-inline` mede a chamada com o inline desligado."
+    ],
+    "deeper": "Builds, caminhos e ressalvas (em inglês): [wasm.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/wasm.md)."
+  },
+  "workers": {
+    "title": "Workers: uma fronteira de mensagens",
+    "short": "Workers",
+    "lede": "Uma ida e volta a um Worker é uma fronteira de mensagens, não de WebAssembly. Ela é medida como idas e voltas sequenciais, thread principal → Worker → thread principal, separadamente para cada forma de mover a entrada.",
+    "points": [
+      "`clone`: o `postMessage` copia o array; quem chama continua com ele.",
+      "`copy`: quem chama copia com `slice()` e transfere a cópia.",
+      "`transfer`: o buffer de quem chama vai até o Worker e volta.",
+      "`resident`: a entrada já vive no Worker; nenhum dado se move.",
+      "WebAssembly em um Worker sempre copia o array recebido para a memória linear, então até uma transferência paga uma cópia."
+    ],
+    "caveat": "São latências de uma requisição por vez. Não medem manter a thread principal livre, nem vazão com várias mensagens em trânsito.",
+    "deeper": "Harness, medição e metadados (em inglês): [browser.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/browser.md)."
+  },
+  "jit": {
+    "title": "Novo vs compartilhado: histórico do JIT",
+    "short": "Novo vs compartilhado",
+    "lede": "Todo caso roda duas vezes por execução: em um processo (ou navegador) novo, e em um processo compartilhado por runtime (ou página por navegador e thread), depois dos casos anteriores. O mesmo caso pode variar várias vezes entre os dois.",
+    "points": [
+      "Diferenças de várias vezes apareceram só no V8 (Node.js, Deno, Chromium), nas duas direções. Bun e Firefox também divergiram, mas bem menos.",
+      "O scriptc compila antecipadamente e não tem JIT: seus processos novo e compartilhado executam o mesmo código de máquina, e os resultados ficaram próximos.",
+      "O harness nunca contorna isso com flags do motor ou reescrevendo laços. Nenhum dos modos é a resposta certa, por isso os dois são publicados."
+    ],
+    "deeper": "Rastros e exemplos (em inglês): [findings.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/findings.md#jit-history-fresh-versus-shared-processes)."
+  },
+  "methodology": {
+    "title": "Metodologia e ressalvas",
+    "short": "Metodologia",
+    "lede": "Resultados só são comparáveis quando foram medidos da mesma forma, então o método faz parte de cada resultado.",
+    "points": [
+      "**Medição em lotes.** Lotes calibrados para cerca de 20 ms; 5 lotes de aquecimento, depois 30 medidos. As amostras brutas são mantidas.",
+      "**Três execuções, embaralhadas.** Um embaralhamento com semente ordena todas as unidades entre runtimes, casos e modos; a semente é registrada.",
+      "**Correção depois da medição.** Cada processo confere o que mediu contra a referência em TypeScript depois de medir. Uma divergência descarta a unidade.",
+      "**Condições oficiais.** Governor `performance`, turbo desligado, CPUs fixadas, sem avisos de condição, sem unidades com falha."
+    ],
+    "readingSummary": "Como ler os números",
+    "reading": [
+      "Um valor é a mediana de três medianas por execução.",
+      "Quando os resultados em processo novo e compartilhado divergem (suas medianas por execução não se sobrepõem e diferem em mais de 5%), os dois são mostrados.",
+      "Quando as medianas por execução de um caso variam mais de 5%, mostra-se o intervalo em vez de um número.",
+      "Razões comparam caminhos dentro de um runtime. Tempos absolutos de runtimes diferentes compartilham a máquina, não o motor."
+    ],
+    "caveatsSummary": "Ressalvas",
+    "caveats": [
+      "Uma máquina, uma plataforma: um notebook i7-12700H com Linux x86_64. macOS, Windows, Safari e dispositivos móveis não são cobertos.",
+      "Alguns casos continuam instáveis entre execuções. O limite de 5% é uma heurística; ainda não há intervalos de confiança.",
+      "Só microbenchmarks, todos síncronos. Chamadas assíncronas, APIs \"chatty\" vs em lote e uma carga realista com SQLite estão planejadas.",
+      "O repositório também documenta execuções de desenvolvimento (turbo ligado). Nunca compare os tempos absolutos delas com estes."
+    ],
+    "claimsSummary": "O que o isotsbench não afirma",
+    "claims": [
+      "Que código nativo é sempre mais rápido que TypeScript.",
+      "Que um runtime é mais rápido que outro, ou que FFI sempre vence Node-API.",
+      "Que WebAssembly equivale a código nativo.",
+      "Que um microbenchmark representa o desempenho de uma aplicação."
+    ],
+    "deeper": "Procedimento completo (em inglês): [methodology.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/methodology.md). Todas as ressalvas: [limitations.md](https://github.com/gilvandovieira/isotsbench/blob/main/docs/limitations.md)."
+  },
+  "evidence": {
+    "title": "Evidências e dados",
+    "short": "Evidências e dados",
+    "lede": "O repositório e suas execuções publicadas são a fonte da verdade. Esta página é uma leitura deles.",
+    "repository": "Repositório",
+    "repositoryText": "código, harness e README",
+    "docs": "Documentação",
+    "docsFindings": "Resultados",
+    "docsBenchmarks": "Benchmarks",
+    "docsMethodology": "Metodologia",
+    "docsLimitations": "Limitações",
+    "raw": "Evidência bruta",
+    "rawRuntimes": "Node.js, Bun, Deno e scriptc; todas as suítes.",
+    "rawBrowsers": "Chromium e Firefox; thread principal e Worker.",
+    "rawNote": "Cada diretório contém `environment.json` (hardware, versões, condições, hashes dos artefatos, semente) e um arquivo por runtime ou thread de navegador com todas as amostras brutas.",
+    "normalized": "Dados normalizados",
+    "normalizedText": "`results.json`, `results.csv` e `metadata.json`: um registro por execução, ambiente, modo de isolamento e caso, cada um ligado ao seu registro bruto. Gerados por `make normalize`.",
+    "reproduce": "Reproduzir",
+    "reproduceNote": "Só Linux. `make setup` altera configurações da CPU via `sudo`; `make teardown` as restaura."
+  },
+  "charts": {
+    "error": "Não foi possível carregar os dados do gráfico ({error}).",
+    "note": "Cada valor é a mediana de três medianas por execução. A tabela de dados lista todos os valores com o id de cada caso.",
+    "faster": "{x} mais rápido",
+    "slower": "{x} mais lento",
+    "legend": {
+      "fresh": "processo novo",
+      "shared": "processo compartilhado",
+      "range": "intervalo entre execuções (instável, †)",
+      "refBoundary": "laço vazio, para referência",
+      "refWasmSum": "referência nativa",
+      "refWorkers": "a mesma soma na thread principal",
+      "compute": "soma com entrada residente",
+      "transfer": "cópia para a memória linear",
+      "native": "soma nativa via Node-API",
+      "parity": "mesmo tempo que o TypeScript"
+    },
+    "env": {
+      "node": "Node.js",
+      "bun": "Bun",
+      "deno": "Deno",
+      "scriptc": "scriptc",
+      "chromiumMain": "Chromium, thread principal",
+      "firefoxMain": "Firefox, thread principal",
+      "chromiumWorker": "Chromium",
+      "firefoxWorker": "Firefox"
+    },
+    "paths": {
+      "emptyLoop": "Laço vazio (TypeScript)",
+      "napi": "Node-API",
+      "ffi": "FFI",
+      "wasmInlineable": "WebAssembly, chamada padrão",
+      "wasmNoInline": "WebAssembly, sem inline",
+      "wasmCopy": "WebAssembly, cópia a cada chamada",
+      "wasmResident": "WebAssembly, entrada residente",
+      "simdCopy": "simd128, cópia a cada chamada",
+      "simdResident": "simd128, entrada residente",
+      "defaultBuild": "build padrão",
+      "simdBuild": "build simd128",
+      "roundTrip": "ida e volta, sem dados",
+      "workerResident": "resident: já está no Worker",
+      "workerTransfer": "transfer: vai e volta",
+      "workerCopy": "copy: slice(), depois transferência",
+      "workerClone": "clone: clone estruturado",
+      "mainThread": "thread principal, entrada residente"
+    },
+    "shapes": {
+      "ascii": "String ASCII entrando, 16 MiB",
+      "utf8": "String UTF-8 mista entrando, 16 MiB",
+      "bytesOut": "Buffer novo saindo, 16 MiB",
+      "objects": "10.000 linhas saindo como objetos JS",
+      "packed": "10.000 linhas saindo empacotadas, decodificadas em JS"
+    },
+    "table": {
+      "summary": "Tabela de dados",
+      "caption": "Execução oficial {runs}. Mediana de três medianas por execução; † indica um intervalo entre execuções.",
+      "env": "Ambiente",
+      "case": "Caso",
+      "fresh": "Novo",
+      "shared": "Compartilhado",
+      "note": "Observação",
+      "divergent": "novo e compartilhado diferem",
+      "unstable": "instável entre execuções"
+    },
+    "boundary": {
+      "title": "Custo de uma chamada vazia",
+      "reading": "Uma chamada FFI custou {ffi} e uma chamada Node-API {napi}, conforme o runtime. No Node.js e no Deno, a chamada WebAssembly padrão custou exatamente o mesmo que o laço vazio: não sobrou chamada para medir. Com o inline desligado, custou {noInline}.",
+      "description": "Tempo por chamada de `noop`, por caminho, agrupado por runtime.",
+      "axis": "tempo por chamada (escala logarítmica)"
+    },
+    "wasmSum": {
+      "title": "Somar 10⁶ inteiros: nativo e WebAssembly",
+      "reading": "Todo caminho nativo levou {native}. O build padrão do WebAssembly foi mais lento mesmo com a entrada já na memória linear ({resident}). Compilada com `simd128`, a soma residente ficou a {simd} do Node-API.",
+      "description": "`sum_i32` sobre 10⁶ elementos, por chamada, em cada runtime de servidor e na thread principal de cada navegador.",
+      "axis": "tempo por chamada"
+    },
+    "wasmSplit": {
+      "title": "Para onde vai o tempo do WebAssembly",
+      "reading": "Copiar 10⁶ inteiros para a memória linear acrescentou {transfer} por chamada: mais que a soma nativa inteira. O build `simd128` encurtou a soma, não a cópia.",
+      "description": "Cada barra é `wasm.copy`, dividida na soma com entrada residente (`wasm.resident`) e no restante, a cópia. A divisão subtrai duas medianas medidas de forma independente, então é aproximada. Processos novos; a marca vertical é a soma nativa via Node-API.",
+      "axis": "tempo por chamada",
+      "value": "soma {compute} · cópia {transfer}"
+    },
+    "workers": {
+      "title": "Idas e voltas a um Worker pela forma de mover a entrada",
+      "reading": "Uma ida e volta sem dados custou {trip}. Com 10⁶ elementos, levar a entrada ao Worker acrescentou cerca de {transfer} com uma transferência, {copy} com uma cópia explícita e {clone} com um clone estruturado, em relação à entrada que já estava lá.",
+      "description": "Idas e voltas sequenciais, thread principal → Worker → thread principal, com `sum_i32` em WebAssembly dentro do Worker. A última linha de cada navegador é a mesma soma na sua thread principal.",
+      "axis": "tempo por ida e volta"
+    },
+    "jit": {
+      "title": "O mesmo código, novo e compartilhado",
+      "reading": "O Node.js rodou a mesma soma em TypeScript {node} mais rápido em um processo compartilhado do que em um novo. O checksum do Deno foi na direção oposta: {deno} mais lento no processo compartilhado. O scriptc, que não tem JIT, e o Bun, cujo motor é o JavaScriptCore, não mostraram essa diferença na soma.",
+      "description": "Dois dos casos em que os resultados novo e compartilhado divergem, e dois controles. Os processos compartilhados rodaram outros casos antes.",
+      "axis": "tempo por chamada (escala logarítmica)"
+    },
+    "dataShape": {
+      "title": "Tempo do Node-API relativo ao TypeScript, pelo que atravessa",
+      "reading": "Strings ASCII entrando e buffers novos saindo ficam à esquerda da linha em todos os runtimes: o Node-API foi mais rápido. Linhas devolvidas como objetos ficam bem à direita, e linhas empacotadas fecham só parte dessa diferença.",
+      "description": "Tempo do Node-API dividido pelo tempo do TypeScript no mesmo runtime. À esquerda da linha, o Node-API foi mais rápido.",
+      "axis": "Node-API ÷ TypeScript (escala logarítmica)"
+    }
+  },
+  "footer": {
+    "text": "O isotsbench tem licença dupla, MIT ou Apache-2.0. Os resultados vêm das execuções oficiais publicadas no commit `da569f4`."
+  }
+}
