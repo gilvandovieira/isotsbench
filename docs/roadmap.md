@@ -14,7 +14,7 @@ What has been built, and what is planned but not implemented. Current capabiliti
 | v0.6.0 | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
 | v0.7.0 | Browsers (Chromium, Firefox): the boundary suite on the main thread, and main → Worker → TypeScript/WASM paths that separate structured clone, explicit copy and transfer ([browser.md](browser.md)) |
 
-v0.6.0 has one pinned official-profile run of the boundary suite ([findings.md](findings.md#webassembly)), and v0.7.0 one of every browser path ([findings.md](findings.md#browsers-and-workers)). Neither meets the official criteria: those need the performance governor and turbo disabled, which the benchmark runners record but do not set (`make setup` now does, on request).
+The first runs to meet the official criteria cover every runtime path and every browser path of v0.7.0. Their raw data is committed ([findings.md](findings.md#official-results)). Earlier pinned runs were development runs with `powersave` and turbo on.
 
 ## Planned
 

@@ -110,7 +110,7 @@ make compare RUNS="results/raw/<a> results/raw/<b>"
 **Development vs official.**
 
 - A result is official only if its `environment.json` has `conditions.officialCriteriaMet: true`: the official profile, no condition warnings and no failed units.
-- No run so far meets that. Everything in `docs/findings.md` is a development result from a machine with `powersave` and turbo on. Say so whenever you cite it.
+- Only the two runs under "Official results" in `docs/findings.md` meet it; their directories are committed in `results/raw/`. Everything else in `findings.md` is a development result (`powersave`, turbo on). Say which one you cite. Never compare absolute times across the two kinds: with turbo off they are about twice as long.
 - Also check `git.dirty` and whether harness options match: runs with different warmup, samples or sample-ms are not comparable.
 
 ## Interpreting numbers

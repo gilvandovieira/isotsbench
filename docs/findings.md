@@ -1,10 +1,10 @@
 # Findings
 
-Observations from development runs on one machine. They explain methodological choices and show what the benchmark can reveal. **None of them is an official result**: the reference machine ran with the `powersave` governor and turbo enabled (see [methodology.md](methodology.md#official-run-procedure)). Raw data for the runs named here is local to that machine (`results/raw/` is not committed).
+Measured results from one machine. [Official results](#official-results) reports the first runs that met the official criteria; their raw data is committed under `results/raw/`. Everything after [Setup](#setup-development-runs) comes from **development runs**. Those explain methodological choices and show what the benchmark can reveal, but they are not official results: the machine ran with the `powersave` governor and turbo enabled (see [methodology.md](methodology.md#official-run-procedure)). Their raw data was not kept.
 
 ## Summary
 
-Cost profiles observed so far. The sections below give the numbers.
+Cost profiles observed so far. The official runs reproduced each of them, with every absolute time about twice as long, consistent with turbo off (see [Official results](#official-results)). The sections below give the numbers.
 
 - **Boundary cost varies by binding and runtime.** A call through Bun or Deno FFI costs 1–3 ns; Node-API costs 7–45 ns depending on the runtime. See [Boundary](#boundary-node-api-and-ffi).
 - **Past about 1M elements, borrowed native bindings converge.** Node-API and FFI run `sum_i32` over 10^6 elements in about 60 µs.
@@ -30,7 +30,135 @@ Cost profiles observed so far. The sections below give the numbers.
 
   WASM in a Worker adds its own copy into linear memory (about 200 µs) on top of any of them.
 
-## Setup
+## Official results
+
+Two runs met the official criteria (`conditions.officialCriteriaMet: true`). They had no condition warnings and no failed units, and ran on commit `da569f4` with a clean tree.
+
+| Run | Command | Scope |
+| --- | --- | --- |
+| `results/raw/2026-09-29T10-24-40-196Z` | `make bench-official CPUS=8,10` | Node 24.21.0, Bun 1.4.2, Deno 2.9.7, scriptc 0.1.7; every suite; 1,782 processes, 1 h 25 min |
+| `results/raw/2026-09-29T11-49-48-358Z` | `make bench-browser-official CPUS=2,8,10` | Chrome for Testing 153 (V8 15.3.76.4), Firefox 156.0.1; main thread and Worker; 606 pages (no relaunches), 26 min |
+
+Conditions (applied with `make setup`):
+
+- `performance` governor and energy-performance preference;
+- turbo off;
+- `performance` platform profile;
+- 3 runs, both isolation modes, seeded shuffle, default harness options.
+
+Values are medians of 3 per-run medians, fresh process (or browser) per case. When the shared mode differs by more than 5%, the value is given as fresh / shared.
+
+**Absolute times are about twice the development runs'.** The factor is the same across unrelated cases:
+
+- `sum_i32/napi/1000000` in Node.js: 62.8 → 127 µs;
+- `checksum_bytes` at 16 MiB: about 15 → 29.4 ms;
+- `noop/ts` in Node.js: 0.28 → 0.55 ns;
+- `noop/worker.ts` in Chromium: 7.95 → 15.2 µs.
+
+That is consistent with the CPU running at its base clock with turbo off; the frequency itself was not measured. Ratios and break-even sizes can be compared with the development runs; absolute times cannot.
+
+### Runtimes
+
+| Case | Node | Bun | Deno | scriptc |
+| --- | ---: | ---: | ---: | ---: |
+| `noop/ts` | 0.55 ns | 0.25 ns | 0.55 ns | 0.87 ns |
+| `noop/napi` | 13.1 ns | 71.6 / 55.0 ns | 14.0 ns | – |
+| `noop/ffi` | – | 2.19 ns | 4.44 ns | 3.50 ns |
+| `noop/wasm.inlineable` | 0.55 ns | 2.68 ns | 0.55 ns | – |
+| `noop/wasm.no-inline` | 5.80 ns | – | 5.18 ns | – |
+| `sum_i32/ts/1000000` | 7.17 / 1.10 ms | 453 µs | 8.22 ms / 931 µs | 6.63 ms |
+| `sum_i32/napi` or `ffi` `/1000000` | 127 µs | 122 µs | 122–128 µs | 121 µs |
+| `sum_i32/wasm.copy/1000000` | 711 µs | 625 / 561 µs | 704 µs | – |
+| `sum_i32/wasm.resident/1000000` | 446 µs | 360 / 295 µs | 452 µs | – |
+| `sum_i32/wasm.simd128.resident/1000000` | 141 / 128 µs | 180 / 166 µs | 159 / 144 µs | – |
+| `string_len/ts/ascii/16777216` | 62.6 / 36.7 ms | 19.9 ms | 36.7 ms | 164 / 176 ms |
+| `string_len/napi/ascii/16777216` | 5.77 ms | 2.17 ms | 1.87 ms | – |
+| `string_len/ts/utf8/16777216` | 36.6 / 33.1 ms | 20.8 ms | 32.6 ms | 397 ms |
+| `string_len/napi/utf8/16777216` | 47.3 ms | 17.9 ms | 35.5 ms | – |
+| `checksum_bytes/ts/16777216` | 29.4 ms | 35.5 ms | 29.4 / 102.9 ms | 117 ms |
+| `checksum_bytes/napi` or `ffi` `/16777216` | 29.4 ms | 29.4 ms | 29.4 ms | 29.4 ms |
+| `return_bytes/ts/16777216` | 29.5 / 31.1 ms | 14.5 / 17.6 ms | 37.5 / 13.5 ms | 69.3 ms |
+| `return_bytes/napi/16777216` | 2.31 / 2.46 ms | 2.10 ms | 2.00 ms | – |
+| `return_rows/ts/10000` | 309 / 184 µs | 849 / 639 µs | 274 µs | 1.47 ms |
+| `return_rows/napi.objects/10000` | 9.67 ms | 4.69 ms | 10.3 ms | – |
+| `return_rows/napi.packed/10000` | 2.10 ms | 1.68 / 1.53 ms | 2.23 ms | – |
+
+Reproduced from the development runs:
+
+- **Boundary cost.**
+  - V8 still inlines a trivial WASM call away: `noop/wasm.inlineable` costs exactly what `noop/ts` costs in Node.js and Deno.
+  - Node-API costs 13–72 ns per call, FFI 2–4.5 ns.
+  - At 10^6 elements every native `sum_i32` path converges on about 122–128 µs.
+- **WASM transfer and code generation.** At 10^6 elements the copy into linear memory (`copy − resident`) costs 252–266 µs in every runtime. `simd128` brings the resident sum within 1.0–1.5× of native (Node.js 1.0–1.1×, Deno 1.1–1.2×, Bun 1.4–1.5×).
+- **Strings.** ASCII ingress is 6–20× faster than counting bytes in TS. Mixed UTF-8 is no cheaper through native code in Node.js and Deno.
+- **Returned data.** No native row strategy breaks even at any size, in any runtime. Returning a 16 MiB buffer is 7–19× faster through native code than filling it in TS.
+- **scriptc** is the most stable runtime (1 of 158 results unstable). `string_len/ffi.borrowed` costs 8.9 ns at every size, and FFI `sum_i32` breaks even from 1 element.
+
+Break-even against each runtime's TS, fresh / shared where they differ:
+
+| Path | `sum_i32` | `string_len/ascii` | `string_len/utf8` | `checksum_bytes` | `return_bytes` |
+| --- | --- | --- | --- | --- | --- |
+| Node `napi` | from 100 | from 64 | never | never / from 65536 | from 1024 |
+| Bun `napi` | from 1000 | from 1024 | from 65536 / from 1024 | from 1024 | from 1024 |
+| Bun `ffi` | from 100 | from 16 | from 1024 | from 16 | from 16 |
+| Deno `napi` | from 1000 / from 100 | from 64 | never | from 16777216 / from 65536 | from 65536 |
+| Deno `ffi` | from 100 | from 64 | never / from 1048576 | from 16777216 / from 64 | from 64 |
+| scriptc `ffi` | from 1 | from 16 (`ffi.borrowed`) | from 16 (`ffi.borrowed`) | from 16 | – |
+
+`bytes_len` never breaks even: its TS baseline is `data.byteLength`. The WASM `sum_i32` paths break even from 10–100 elements, except Bun `wasm.copy` (never) and Bun `wasm.simd128.copy` (from 1000).
+
+Observed more clearly than before:
+
+- **Node.js TS matches native `checksum_bytes`.** Both take 29.4 ms at 16 MiB. So `napi` never breaks even in a fresh Node.js process, where the development runs had a small native advantage.
+- **More V8 JIT-history effects.** 101 cases diverged between fresh and shared processes. Besides the known `sum_i32/ts` rows (shared 0.11–0.15× fresh from 10k elements):
+  - Deno `checksum_bytes/ts`: **3.5× slower in a shared process** (102.9 vs 29.4 ms at 16 MiB). Node.js shows the same at 1 MiB.
+  - Node.js `bytes_len/ts` from 64 KiB: 7.17 ns fresh vs 1.31 ns shared.
+  - Node.js `string_len/ts/ascii` from 1 MiB: shared 0.59× fresh.
+  - Deno `return_bytes/ts` from 64 KiB: fresh 2.7–2.8× slower than shared.
+- **Stability.** 186 of 1,176 mode/case results exceeded 5% run-to-run spread, against 22–30% in the development runs:
+
+  | Runtime | Unstable |
+  | --- | ---: |
+  | Bun | 99 of 372 |
+  | Deno | 50 of 376 |
+  | Node.js | 36 of 270 |
+  | scriptc | 1 of 158 |
+
+### Browsers
+
+| Case | Chromium | Firefox |
+| --- | ---: | ---: |
+| `noop/ts` | 0.55 ns | 0.49 ns |
+| `noop/wasm.inlineable` | 0.82 ns | 3.31 ns |
+| `sum_i32/ts/10000` | 71.2 / 9.87 µs | 7.03 / 8.08 µs |
+| `sum_i32/wasm.copy/1000000` | 706 µs | 866 / 704 µs |
+| `sum_i32/wasm.resident/1000000` | 438 µs | 440 µs |
+| `sum_i32/wasm.simd128.resident/1000000` | 148 / 136 µs | 159 / 163 µs |
+| `noop/worker.ts` (round trip) | 15.2 µs | 19.3 µs |
+| `sum_i32/worker.wasm.resident/1000000` | 585 / 507 µs | 489 µs |
+| `sum_i32/worker.wasm.transfer/1000000` | 924 / 881 µs | 877 / 904 µs |
+| `sum_i32/worker.wasm.copy/1000000` | 3.08 ms | 2.28 / 2.33 ms |
+| `sum_i32/worker.wasm.clone/1000000` | 5.18 ms | 3.85 / 3.43 ms |
+
+Reproduced from the development run:
+
+- **The main-thread WASM profile.** Chromium's WASM sums match Node.js within about 5%. `simd128` makes the resident sum 3.0× faster in Chromium and 2.8× in Firefox.
+- **Firefox makes a real WASM call** (3.31 ns against a 0.49 ns empty loop).
+- **Chromium's TS `sum_i32`** at 10k–100k elements runs 7× slower in a fresh browser (shared 0.14×).
+- **Firefox `wasm.copy/1000000`** is slower in a fresh browser, now in two runs: shared 0.81× fresh here, 0.77× before.
+- **Messaging costs.** A round trip costs 15–19 µs, and up to 1,000 elements it is most of every Worker path's cost. With the input moved to the Worker (WASM paths, 10^6 elements, added to `resident`):
+  - a transfer adds 339–388 µs, almost all of it the copy into linear memory;
+  - an explicit copy adds 1.8–2.5 ms;
+  - a structured clone adds 3.4–4.6 ms.
+
+  With TS in Firefox the transfer adds 69 µs.
+
+Not reproduced:
+
+- **TypeScript inside Chromium's Worker from 10^5 elements.** `worker.ts.resident/1000000` took 7.71 ms fresh and 9.51 ms shared, against 511 µs fresh in the development run. That makes its decomposition differences negative. In that range the Chromium Worker TS numbers describe V8's tiering of a once-per-message handler, not the messaging. The WASM decomposition is unaffected.
+- **Stability.** 101 of 396 mode/case results exceeded 5% spread; 90 of them are Worker cases. 81 cases diverged between fresh and shared pages.
+
+## Setup (development runs)
 
 Measured on 2026-09-28:
 
