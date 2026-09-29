@@ -8,7 +8,7 @@ RUNS ?=
 SUITE ?=
 SUITE_ARG = $(if $(SUITE),--suite $(SUITE))
 
-.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare normalize site site-serve clean
+.PHONY: build test check setup teardown bench bench-quick bench-official bench-browser bench-browser-quick bench-browser-official compare normalize site site-check site-serve clean
 
 build:
 	node scripts/build.ts
@@ -21,6 +21,7 @@ test:
 	node tests/wasm.test.ts
 	node tests/browser.test.ts
 	node tests/system-setup.test.ts
+	$(MAKE) site-check
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
@@ -76,6 +77,12 @@ site: normalize
 	rm -rf build/site
 	cp -RL site build/site
 	rm build/site/README.md
+
+# Dataset, copy and built site, including a Chromium check under the Pages base path when Chromium is found.
+site-check: site
+	node tests/normalize.test.ts
+	node tests/site.test.ts
+	node tests/pages.test.ts
 
 # http://127.0.0.1:8000/isotsbench/, as GitHub Pages serves it.
 site-serve: site
