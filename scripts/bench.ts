@@ -26,8 +26,8 @@ import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { caseGroup, formatDataRate, formatNs, table } from "../bench/common/format.ts";
-import { parseSuites, type Suite, SUITE_NAMES } from "../bench/common/suites.ts";
+import { formatNs } from "../bench/common/format.ts";
+import { parseSuites, type Suite } from "../bench/common/suites.ts";
 import { type ProcessGroup, processGroupOf, WASM_NO_INLINE_FLAG } from "../bench/common/process-groups.ts";
 import { buildNative, buildScriptc, buildWasm, SCRIPTC_EXECUTABLE, type ScriptcBuild, type WasmBuild, scriptcVersion } from "./build.ts";
 import {
@@ -35,10 +35,12 @@ import {
   caseVariance,
   type Isolation,
   printDivergences,
+  printSummary,
   printVariance,
   splitRuns,
   type StoredResult,
 } from "./compare.ts";
+import { mulberry32, shuffle } from "./shuffle.ts";
 import { assessConditions, formatCpuList, parseCpuList, probeSystem } from "./system.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -174,27 +176,6 @@ function resolvePlan(values: Record<string, string | boolean | undefined>): Plan
   };
 }
 
-/** Small seeded PRNG (mulberry32) so a shuffled schedule can be reproduced from its seed. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shuffle<T>(items: T[], random: () => number): T[] {
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
 /**
  * Every repetition runs every unit once: one process per case for `case`
  * isolation, one process per runtime for `runtime` isolation. Shuffling the
@@ -295,86 +276,6 @@ function collectEnvironment(
     },
     failedUnits: [] as (Unit & { sequence: number; status: number | null })[],
   };
-}
-
-/** The path segment of a case id: "ts", "napi", "ffi", or a strategy such as "napi.objects". */
-const pathOf = (v: CaseVariance) => v.id.split("/")[1];
-
-function printSummary(variances: CaseVariance[], runs: number, mode: string | null): void {
-  const runtimes = [...new Set(variances.map((v) => v.runtime))];
-  const cell = (ns: number | undefined) => (ns === undefined ? "-" : formatNs(ns));
-  const title = runs > 1 ? `median ns/op (median of ${runs} runs)` : "median ns/op";
-
-  if (mode) console.log(`\n${mode}:`);
-  for (const suite of SUITE_NAMES) {
-    const inSuite = variances.filter((v) => v.suite === suite);
-    if (!inSuite.length) continue;
-    console.log(`\n== ${suite} suite ==`);
-
-    for (const rt of runtimes) {
-      const mine = inSuite.filter((v) => v.runtime === rt);
-      if (!mine.length) continue;
-      const paths = [...new Set(mine.map(pathOf))].sort((a, b) => Number(b === "ts") - Number(a === "ts"));
-      const natives = paths.filter((path) => path !== "ts");
-      const hasTs = paths.includes("ts");
-      const find = (group: string, path: string) => mine.find((v) => pathOf(v) === path && caseGroup(v.id) === group);
-      const groups = [...new Set(mine.map((v) => caseGroup(v.id)))];
-      const rows = groups.map((group) => {
-        const ts = find(group, "ts")?.median;
-        return [
-          group,
-          ...paths.map((path) => cell(find(group, path)?.median)),
-          ...(hasTs
-            ? natives.map((path) => {
-              const ns = find(group, path)?.median;
-              return ts && ns ? `${(ns / ts).toFixed(2)}×` : "-";
-            })
-            : []),
-          ...paths.map((path) => {
-            const v = find(group, path);
-            return v ? formatDataRate(v.op, v.payload, v.median, v.strategy) : "-";
-          }),
-        ];
-      });
-      const header = [
-        `${rt}: ${title}`,
-        ...paths,
-        ...(hasTs ? natives.map((path) => `${path}/ts`) : []),
-        ...paths.map((path) => `${path} rate`),
-      ];
-      console.log(`\n${table(header, rows)}`);
-    }
-
-    // Break-even per sized operation: the smallest measured size from which a
-    // native path is faster than ts at that size and every larger one.
-    const sized = inSuite.filter((v) => v.size !== null);
-    const familyOf = (v: CaseVariance) => caseGroup(v.id).split("/").slice(0, -1).join("/");
-    const families = [...new Set(sized.map(familyOf))].filter((f) =>
-      sized.some((v) => familyOf(v) === f && pathOf(v) === "ts")
-    );
-    if (!families.length) continue;
-    const breakEven = (rt: string, path: string, family: string): string => {
-      const median = (p: string, size: number) =>
-        sized.find((v) => v.runtime === rt && pathOf(v) === p && familyOf(v) === family && v.size === size)?.median;
-      const sizes = [...new Set(sized.filter((v) => v.runtime === rt && familyOf(v) === family).map((v) => v.size!))]
-        .sort((a, b) => b - a);
-      if (!sizes.some((size) => median("ts", size) !== undefined && median(path, size) !== undefined)) return "-";
-      let from: number | null = null;
-      for (const size of sizes) {
-        const ts = median("ts", size);
-        const ns = median(path, size);
-        if (ts === undefined || ns === undefined || ns >= ts) break;
-        from = size;
-      }
-      return from === null ? "never" : `from ${from}`;
-    };
-    const rows = runtimes.flatMap((rt) =>
-      [...new Set(sized.filter((v) => v.runtime === rt).map(pathOf))].filter((path) => path !== "ts")
-        .map((path) => [`${rt} ${path}`, ...families.map((f) => breakEven(rt, path, f))])
-    );
-    console.log(`\nbreak-even vs ts (size: elements for sum_i32, rows for return_rows, bytes otherwise):`);
-    console.log(table(["path", ...families], rows));
-  }
 }
 
 function printWarnings(warnings: string[]): void {

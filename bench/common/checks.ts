@@ -54,11 +54,27 @@ interface LabelledBytes {
   data: Uint8Array;
 }
 
+export interface LabelledInts {
+  label: string;
+  data: Int32Array<ArrayBuffer>;
+}
+
+/** add_i32 check inputs as flat (a, b) pairs, including i32 overflow. */
+export const ADD_I32_CHECK_PAIRS: number[] = [0, 0, 2, 3, -7, 3, 2147483647, 1, -2147483648, -1];
+
+/** sum_i32 check inputs: every size (including 0), then an offset view. */
+export function sumI32CheckInputs(): LabelledInts[] {
+  const inputs: LabelledInts[] = [];
+  const sizes: number[] = [0, ...SUM_I32_SIZES];
+  for (let i = 0; i < sizes.length; i++) inputs.push({ label: `size ${sizes[i]!}`, data: makeI32Data(sizes[i]!) });
+  inputs.push({ label: "offset view", data: makeI32Data(64).subarray(3, 40) });
+  return inputs;
+}
+
 /** noop, i32 overflow, every sum_i32 size (including 0) and an offset view. */
 export function checkBoundary(paths: BoundaryPath[]): void {
-  const pairs: number[] = [0, 0, 2, 3, -7, 3, 2147483647, 1, -2147483648, -1];
-  const view = makeI32Data(64).subarray(3, 40);
-  const sizes: number[] = [0, ...SUM_I32_SIZES];
+  const pairs = ADD_I32_CHECK_PAIRS;
+  const sums = sumI32CheckInputs();
   for (const path of paths) {
     expectTrue(`${path.name} noop returns undefined`, path.noopReturnsUndefined());
     for (let i = 0; i < pairs.length; i += 2) {
@@ -66,11 +82,9 @@ export function checkBoundary(paths: BoundaryPath[]): void {
       const b = pairs[i + 1]!;
       expectNumber(`${path.name} add_i32(${a}, ${b})`, path.add_i32(a, b), ts.add_i32(a, b));
     }
-    for (let i = 0; i < sizes.length; i++) {
-      const data = makeI32Data(sizes[i]!);
-      expectNumber(`${path.name} sum_i32 size ${sizes[i]!}`, path.sum_i32(data), ts.sum_i32(data));
+    for (const s of sums) {
+      expectNumber(`${path.name} sum_i32 ${s.label}`, path.sum_i32(s.data), ts.sum_i32(s.data));
     }
-    expectNumber(`${path.name} sum_i32 offset view`, path.sum_i32(view), ts.sum_i32(view));
   }
 }
 
