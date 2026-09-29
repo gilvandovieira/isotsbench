@@ -75,6 +75,7 @@ normalize:
 # The GitHub Pages report: site/ with its data symlink resolved, in build/site/.
 site: normalize
 	rm -rf build/site
+	mkdir -p build
 	cp -RL site build/site
 	rm build/site/README.md
 
