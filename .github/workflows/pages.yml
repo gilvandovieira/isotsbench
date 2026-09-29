@@ -1,0 +1,58 @@
+# Publishes the report in site/ to GitHub Pages.
+#
+# It only rebuilds and checks what is already committed: the normalized dataset
+# from the committed official runs, and the site that reads it. It never runs a
+# benchmark; official numbers come from a controlled local machine
+# (docs/methodology.md#official-run-procedure).
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The raw-evidence links point at the commit that published the runs.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Regenerates results/normalized/, builds build/site/ and checks both,
+      # including Chromium under the /isotsbench/ base path.
+      - run: make site-check
+
+      - name: The committed dataset must match the regenerated one
+        run: |
+          git status --porcelain -- results/normalized
+          test -z "$(git status --porcelain -- results/normalized)"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
