@@ -28,7 +28,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { caseGroup, formatDataRate, formatNs, table } from "../bench/common/format.ts";
 import { parseSuites, type Suite, SUITE_NAMES } from "../bench/common/suites.ts";
-import { buildNative, buildScriptc, SCRIPTC_EXECUTABLE, type ScriptcBuild, scriptcVersion } from "./build.ts";
+import { type ProcessGroup, processGroupOf, WASM_NO_INLINE_FLAG } from "../bench/common/process-groups.ts";
+import { buildNative, buildScriptc, buildWasm, SCRIPTC_EXECUTABLE, type ScriptcBuild, type WasmBuild, scriptcVersion } from "./build.ts";
 import {
   type CaseVariance,
   caseVariance,
@@ -74,8 +75,29 @@ interface Unit {
   run: number;
   runtime: string;
   isolation: Isolation;
-  /** null: a shared process running every selected case in canonical order. */
+  /** Engine flags the process starts with (see bench/common/process-groups.ts). */
+  group: ProcessGroup;
+  /** null: a shared process running every selected case of its group in canonical order. */
   caseId: string | null;
+}
+
+/**
+ * Commands for the non-default process groups. A runtime without an entry
+ * cannot run that group. Deno receives V8 flags through --v8-flags.
+ */
+const GROUP_COMMANDS: Record<Exclude<ProcessGroup, "default">, Record<string, string[]>> = {
+  "wasm-no-inline": {
+    node: ["node", WASM_NO_INLINE_FLAG, "bench/run.ts"],
+    deno: ["deno", "run", "--allow-read", "--allow-write", "--allow-ffi", `--v8-flags=${WASM_NO_INLINE_FLAG}`, "bench/run.ts"],
+  },
+};
+
+/** The command that starts a process of `group` for `runtime`, including the group argument. */
+function commandFor(runtime: string, group: ProcessGroup): string[] {
+  if (runtime === "scriptc") return RUNTIME_COMMANDS.scriptc;
+  const base = group === "default" ? RUNTIME_COMMANDS[runtime] : GROUP_COMMANDS[group][runtime];
+  if (!base) throw new Error(`${runtime} cannot run process group ${group}`);
+  return [...base, "--process-group", group];
 }
 
 /** --filter / --suite arguments for bench/run.ts. */
@@ -184,13 +206,14 @@ function schedule(plan: Plan, runtimes: string[], casesByRuntime: Record<string,
   const modes: Isolation[] = plan.isolation === "both" ? ["case", "runtime"] : [plan.isolation];
   const units: Unit[] = [];
   for (let run = 1; run <= plan.runs; run++) {
-    const base = runtimes.flatMap((runtime) =>
-      modes.flatMap((isolation): Unit[] =>
+    const base = runtimes.flatMap((runtime) => {
+      const groups = [...new Set(casesByRuntime[runtime].map(processGroupOf))];
+      return modes.flatMap((isolation): Unit[] =>
         isolation === "case"
-          ? casesByRuntime[runtime].map((caseId) => ({ run, runtime, isolation, caseId }))
-          : [{ run, runtime, isolation, caseId: null }]
-      )
-    );
+          ? casesByRuntime[runtime].map((caseId) => ({ run, runtime, isolation, group: processGroupOf(caseId), caseId }))
+          : groups.map((group) => ({ run, runtime, isolation, group, caseId: null }))
+      );
+    });
     units.push(...(plan.order === "shuffle" ? shuffle(base, random) : base));
   }
   return units;
@@ -217,6 +240,7 @@ function collectEnvironment(
   caseIds: string[],
   casesByRuntime: Record<string, string[]>,
   native: ReturnType<typeof buildNative> & { scriptc?: ScriptcBuild },
+  wasm: WasmBuild | null,
 ) {
   const rustc = capture("rustc", ["-vV"]) ?? "";
   const rustcField = (key: string) => rustc.match(new RegExp(`^${key}: (.*)$`, "m"))?.[1] ?? null;
@@ -242,6 +266,7 @@ function collectEnvironment(
       rustflags: process.env.RUSTFLAGS ?? null,
     },
     native,
+    wasm,
     git: {
       commit: capture("git", ["rev-parse", "HEAD"]),
       dirty: capture("git", ["status", "--porcelain"]) !== "",
@@ -255,6 +280,8 @@ function collectEnvironment(
       cpus: plan.cpus ? formatCpuList(plan.cpus) : null,
       pinning: plan.cpus ? { tool: capture("taskset", ["--version"]), command: ["taskset", "-c", formatCpuList(plan.cpus)] } : null,
       runtimeCommands: RUNTIME_COMMANDS,
+      processGroupCommands: GROUP_COMMANDS,
+      canonicalOrder: "cases run in canonical order within a shared process; see docs/methodology.md",
       filter: plan.filter,
       suites: plan.suites,
       cases: caseIds,
@@ -395,11 +422,13 @@ function main(): void {
   if (!available.length) throw new Error("no requested runtime is available");
 
   const native: ReturnType<typeof buildNative> & { scriptc?: ScriptcBuild } = buildNative();
+  const wasm = available.some((rt) => rt !== "scriptc") ? buildWasm() : null;
   if (available.includes("scriptc")) native.scriptc = buildScriptc();
 
   // Each runtime lists the cases it supports (Node.js has no FFI path).
   const casesByRuntime: Record<string, string[]> = {};
   for (const rt of available) {
+    // --list prints the cases of every process group, in canonical order.
     const [cmd, ...args] = RUNTIME_COMMANDS[rt];
     const listed = capture(cmd, [...args, "--list", ...selectionArgs(plan)]);
     if (listed === null) throw new Error(`${rt} failed to list its cases`);
@@ -413,7 +442,7 @@ function main(): void {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = join(ROOT, "results", "raw", runId);
   mkdirSync(outDir, { recursive: true });
-  const environment = collectEnvironment(runId, plan, versions, caseIds, casesByRuntime, native);
+  const environment = collectEnvironment(runId, plan, versions, caseIds, casesByRuntime, native, wasm);
   const writeEnvironment = () =>
     writeFileSync(join(outDir, "environment.json"), JSON.stringify(environment, null, 2) + "\n");
   writeEnvironment();
@@ -438,10 +467,11 @@ function main(): void {
     const sequence = index + 1;
     const tmp = join(outDir, `.unit-${sequence}.json`);
     const selection = unit.caseId ? ["--case", unit.caseId] : selectionArgs(plan);
-    const argv = [...pinPrefix, ...RUNTIME_COMMANDS[unit.runtime], ...harnessArgs, ...selection, "--out", tmp];
+    const argv = [...pinPrefix, ...commandFor(unit.runtime, unit.group), ...harnessArgs, ...selection, "--out", tmp];
     const child = spawnSync(argv[0], argv.slice(1), { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     const mode = plan.isolation === "both" ? ` ${unit.isolation.padEnd(7)}` : "";
-    const label = `[${sequence}/${units.length}] run ${unit.run}${mode} ${unit.runtime.padEnd(4)}`;
+    const group = unit.group === "default" ? "" : ` [${unit.group}]`;
+    const label = `[${sequence}/${units.length}] run ${unit.run}${mode} ${unit.runtime.padEnd(4)}${group}`;
 
     if (child.status !== 0 || !existsSync(tmp)) {
       console.error(`${label} ${unit.caseId ?? "all cases"} FAILED (exit ${child.status})\n${child.stderr}`);

@@ -3,14 +3,14 @@
 
 import type { Payload } from "./payloads.ts";
 
-/** ts: pure (or, under scriptc, compiled) TypeScript; napi: Node-API addon; ffi: C ABI via the runtime's FFI (Bun, Deno, scriptc). */
-export type Impl = "ts" | "napi" | "ffi";
+/** ts: TypeScript; napi: Node-API; ffi: native C ABI; wasm: WebAssembly over the Rust core. */
+export type Impl = "ts" | "napi" | "ffi" | "wasm";
 
 export interface Case {
   id: string;
   op: string;
   impl: Impl;
-  /** Mechanism crossing into native code: "none", "node-api", "bun:ffi", "Deno.dlopen" or "scriptc-ffi". */
+  /** Mechanism crossing into native code: "none", "node-api", runtime FFI or "WebAssembly". */
   binding: string;
   /** Workload size for scalable operations: elements for sum_i32, payload bytes for the marshalling cases. */
   size: number | null;

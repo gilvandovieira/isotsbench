@@ -243,6 +243,8 @@ function comparableSettings(env: Json): Record<string, string> {
     "napi sha256": env.native?.napi?.sha256?.slice(0, 12) ?? "n/a",
     "ffi sha256": env.native?.ffi?.sha256?.slice(0, 12) ?? "n/a",
     "scriptc executable sha256": env.native?.scriptc?.executable?.sha256?.slice(0, 12) ?? "n/a",
+    "wasm sha256": (env.wasm?.default?.artifact ?? env.wasm?.artifact)?.sha256?.slice(0, 12) ?? "n/a",
+    "wasm simd128 sha256": env.wasm?.simd128?.artifact?.sha256?.slice(0, 12) ?? "n/a",
     "warmup/samples/sample-ms": `${env.options?.warmup}/${env.options?.samples}/${env.options?.sampleMs}`,
     "governors": [...new Set(cpus.map((c) => c.governor))].join(",") || (env.cpuGovernor ?? "n/a"),
     "turbo": system.intelPstate?.noTurbo === "1" || system.cpufreqBoost === "0"

@@ -33,14 +33,20 @@ import {
 } from "./payloads.ts";
 import { decodeRows, PACKED_ROW_SIZE, type Row } from "./rows.ts";
 import type { Suite } from "./suites.ts";
+import { loadWasm, type WasmBinding } from "./wasm.ts";
 
 export type { Case, Impl } from "./case.ts";
 
+type ExistingImpl = Exclude<Impl, "wasm">;
 const napi = loadNapi();
 const ffi = loadFfi();
-const BINDINGS: Record<Impl, string> = { ts: "none", napi: "node-api", ffi: ffiBinding() ?? "unavailable" };
+const wasm = loadWasm("default");
+const wasmSimd = loadWasm("simd128");
+/** Only V8 (Node.js, Deno) has a switch for JS→WASM inlining; see process-groups.ts. */
+const V8_RUNTIME = !(globalThis as unknown as Record<string, unknown>).Bun;
+const BINDINGS: Record<ExistingImpl, string> = { ts: "none", napi: "node-api", ffi: ffiBinding() ?? "unavailable" };
 /** Implementations this runtime can run, in canonical order. */
-const IMPLS: Impl[] = ffi ? ["ts", "napi", "ffi"] : ["ts", "napi"];
+const IMPLS: ExistingImpl[] = ffi ? ["ts", "napi", "ffi"] : ["ts", "napi"];
 
 const tsNoop = ts.noop;
 const tsAdd = ts.add_i32;
@@ -52,6 +58,10 @@ const napiSum = napi.sum_i32;
 const ffiNoop = ffi?.noop;
 const ffiAdd = ffi?.add_i32;
 const ffiSum = ffi?.sum_i32;
+const wasmNoop = wasm?.noop;
+const wasmAdd = wasm?.add_i32;
+const wasmSum = wasm?.sum_i32;
+const simdSum = wasmSimd?.sum_i32;
 const tsStringLen = ts.string_len;
 const tsBytesLen = ts.bytes_len;
 const tsChecksum = ts.checksum_bytes;
@@ -110,9 +120,104 @@ function sumFfiLoop(iterations: number, data: Int32Array): number {
   return acc;
 }
 
-function sumCase(impl: Impl, size: number): Case {
+// ---- WebAssembly (boundary suite) -------------------------------------------
+// A JS array and WASM linear memory are separate. `copy` paths copy the input
+// into linear memory on every call; `resident` paths copy it once outside
+// timing, isolating the WASM execution. `simd128` paths run the same source
+// built with SIMD enabled. See docs/wasm.md.
+
+// Shared by `wasm.inlineable` and `wasm.no-inline`: the two never run in the
+// same process (see process-groups.ts), so they never share type feedback.
+function noopWasmLoop(iterations: number): number {
+  for (let i = 0; i < iterations; i++) wasmNoop!();
+  return iterations;
+}
+
+function addWasmLoop(iterations: number): number {
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) acc = wasmAdd!(acc, i);
+  return acc;
+}
+
+// The view is made per batch: an allocation for another case can grow the
+// memory, which replaces `memory.buffer`. All allocations happen while cases
+// are built, before any timing.
+function sumWasmCopyLoop(iterations: number, data: Int32Array, pointer: number): number {
+  const target = new Int32Array(wasm!.memory.buffer, pointer, data.length);
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) {
+    target.set(data);
+    acc = (acc + wasmSum!(pointer, data.length)) | 0;
+  }
+  return acc;
+}
+
+function sumWasmResidentLoop(iterations: number, pointer: number, length: number): number {
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) acc = (acc + wasmSum!(pointer, length)) | 0;
+  return acc;
+}
+
+function sumSimdCopyLoop(iterations: number, data: Int32Array, pointer: number): number {
+  const target = new Int32Array(wasmSimd!.memory.buffer, pointer, data.length);
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) {
+    target.set(data);
+    acc = (acc + simdSum!(pointer, data.length)) | 0;
+  }
+  return acc;
+}
+
+function sumSimdResidentLoop(iterations: number, pointer: number, length: number): number {
+  let acc = 0;
+  for (let i = 0; i < iterations; i++) acc = (acc + simdSum!(pointer, length)) | 0;
+  return acc;
+}
+
+type WasmSumPath = "wasm.copy" | "wasm.resident" | "wasm.simd128.copy" | "wasm.simd128.resident";
+
+/** The WASM sum paths this runtime can run, in canonical order. */
+const WASM_SUM_PATHS: WasmSumPath[] = [
+  ...(wasm ? ["wasm.copy", "wasm.resident"] as const : []),
+  ...(wasmSimd ? ["wasm.simd128.copy", "wasm.simd128.resident"] as const : []),
+];
+
+function wasmSumCase(path: WasmSumPath, size: number): Case {
+  const binding = path.startsWith("wasm.simd128") ? wasmSimd! : wasm!;
   const data = makeI32Data(size);
-  const runs: Record<Impl, (iterations: number) => number> = {
+  const pointer = binding.alloc_i32(size);
+  const resident = path.endsWith("resident");
+  // Resident input is copied here, outside timing; growth keeps its contents.
+  if (resident) new Int32Array(binding.memory.buffer, pointer, size).set(data);
+  const runs: Record<WasmSumPath, (iterations: number) => number> = {
+    "wasm.copy": (iterations) => sumWasmCopyLoop(iterations, data, pointer),
+    "wasm.resident": (iterations) => sumWasmResidentLoop(iterations, pointer, size),
+    "wasm.simd128.copy": (iterations) => sumSimdCopyLoop(iterations, data, pointer),
+    "wasm.simd128.resident": (iterations) => sumSimdResidentLoop(iterations, pointer, size),
+  };
+  return {
+    id: `sum_i32/${path}/${size}`,
+    op: "sum_i32",
+    impl: "wasm",
+    binding: path.startsWith("wasm.simd128") ? "WebAssembly+simd128" : "WebAssembly",
+    size,
+    payload: { kind: "int32array", bytes: size * 4 },
+    strategy: resident ? "resident" : "copy",
+    ownership: resident ? "wasm-memory-resident" : "js-to-wasm-memory-copy",
+    run: runs[path],
+  };
+}
+
+/** One sum through a WASM build, exactly as a `copy` case does it (for the correctness check). */
+function wasmSumOnce(binding: WasmBinding, data: Int32Array): number {
+  const pointer = binding.alloc_i32(data.length);
+  new Int32Array(binding.memory.buffer, pointer, data.length).set(data);
+  return binding.sum_i32(pointer, data.length);
+}
+
+function sumCase(impl: ExistingImpl, size: number): Case {
+  const data = makeI32Data(size);
+  const runs: Record<ExistingImpl, (iterations: number) => number> = {
     ts: (iterations) => sumTsLoop(iterations, data),
     napi: (iterations) => sumNapiLoop(iterations, data),
     ffi: (iterations) => sumFfiLoop(iterations, data),
@@ -152,11 +257,11 @@ function stringLenFfiLoop(iterations: number, value: string, scratch: Uint8Array
   return acc;
 }
 
-function stringLenCase(impl: Impl, variant: (typeof STRING_VARIANTS)[number], bytes: number): Case {
+function stringLenCase(impl: ExistingImpl, variant: (typeof STRING_VARIANTS)[number], bytes: number): Case {
   const value = stringPayload(variant, bytes);
   // Worst case: 3 UTF-8 bytes per UTF-16 code unit.
   const scratch = impl === "ffi" ? new Uint8Array(value.length * 3) : new Uint8Array(0);
-  const runs: Record<Impl, (iterations: number) => number> = {
+  const runs: Record<ExistingImpl, (iterations: number) => number> = {
     ts: (iterations) => stringLenTsLoop(iterations, value),
     napi: (iterations) => stringLenNapiLoop(iterations, value),
     ffi: (iterations) => stringLenFfiLoop(iterations, value, scratch),
@@ -209,9 +314,9 @@ function checksumFfiLoop(iterations: number, data: Uint8Array): number {
   return acc;
 }
 
-function bytesCase(op: "bytes_len" | "checksum_bytes", impl: Impl, bytes: number): Case {
+function bytesCase(op: "bytes_len" | "checksum_bytes", impl: ExistingImpl, bytes: number): Case {
   const data = bytesPayload(bytes);
-  const runs: Record<Impl, (iterations: number) => number> = op === "bytes_len"
+  const runs: Record<ExistingImpl, (iterations: number) => number> = op === "bytes_len"
     ? {
       ts: (iterations) => bytesLenTsLoop(iterations, data),
       napi: (iterations) => bytesLenNapiLoop(iterations, data),
@@ -332,8 +437,8 @@ function returnBytesFfiLoop(iterations: number, bytes: number): number {
   return acc;
 }
 
-function returnBytesCase(impl: Impl, bytes: number): Case {
-  const runs: Record<Impl, (iterations: number) => number> = {
+function returnBytesCase(impl: ExistingImpl, bytes: number): Case {
+  const runs: Record<ExistingImpl, (iterations: number) => number> = {
     ts: (iterations) => returnBytesTsLoop(iterations, bytes),
     napi: (iterations) => returnBytesNapiLoop(iterations, bytes),
     ffi: (iterations) => returnBytesFfiLoop(iterations, bytes),
@@ -394,7 +499,7 @@ const ROW_PATHS = [
 
 function returnCases(select: (id: string) => boolean): Case[] {
   const nativeImpls = IMPLS.filter((impl): impl is "napi" | "ffi" => impl !== "ts");
-  const f64Loops: Record<Impl, (iterations: number) => number> = {
+  const f64Loops: Record<ExistingImpl, (iterations: number) => number> = {
     ts: returnF64TsLoop,
     napi: returnF64NapiLoop,
     ffi: returnF64FfiLoop,
@@ -473,6 +578,26 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
       },
     },
     {
+      id: "noop/wasm.inlineable",
+      op: "noop",
+      impl: "wasm",
+      binding: "WebAssembly",
+      size: null,
+      // The runtime's default: V8 can inline the WASM call into the JS loop.
+      strategy: "inlineable",
+      run: noopWasmLoop,
+    },
+    {
+      id: "noop/wasm.no-inline",
+      op: "noop",
+      impl: "wasm",
+      binding: "WebAssembly",
+      size: null,
+      // Diagnostic: runs only in a V8 process with JS→WASM inlining disabled.
+      strategy: "no-inline",
+      run: noopWasmLoop,
+    },
+    {
       id: "add_i32/ts",
       op: "add_i32",
       impl: "ts",
@@ -508,11 +633,37 @@ export function buildCases(select: (id: string) => boolean = () => true): Case[]
         return acc;
       },
     },
+    {
+      id: "add_i32/wasm.inlineable",
+      op: "add_i32",
+      impl: "wasm",
+      binding: "WebAssembly",
+      size: null,
+      // The runtime's default: V8 can inline the WASM call into the JS loop.
+      strategy: "inlineable",
+      run: addWasmLoop,
+    },
+    {
+      id: "add_i32/wasm.no-inline",
+      op: "add_i32",
+      impl: "wasm",
+      binding: "WebAssembly",
+      size: null,
+      // Diagnostic: runs only in a V8 process with JS→WASM inlining disabled.
+      strategy: "no-inline",
+      run: addWasmLoop,
+    },
   ];
-  const selected = scalar.filter((c) => IMPLS.includes(c.impl) && select(c.id));
-  const sums = SUM_I32_SIZES.flatMap((size) =>
-    IMPLS.filter((impl) => select(`sum_i32/${impl}/${size}`)).map((impl) => sumCase(impl, size))
-  );
+  const available = (c: Case) =>
+    c.impl === "wasm"
+      ? wasm !== null && (c.strategy !== "no-inline" || V8_RUNTIME)
+      : IMPLS.some((impl) => impl === c.impl);
+  const selected = scalar.filter((c) => available(c) && select(c.id));
+  // Per size: every path of the same operation together, in canonical order.
+  const sums = SUM_I32_SIZES.flatMap((size) => [
+    ...IMPLS.filter((impl) => select(`sum_i32/${impl}/${size}`)).map((impl) => sumCase(impl, size)),
+    ...WASM_SUM_PATHS.filter((path) => select(`sum_i32/${path}/${size}`)).map((path) => wasmSumCase(path, size)),
+  ]);
   const strings = STRING_VARIANTS.flatMap((variant) =>
     PAYLOAD_SIZES.flatMap((bytes) =>
       IMPLS.filter((impl) => select(`string_len/${impl}/${variant}/${bytes}`)).map((impl) =>
@@ -558,6 +709,17 @@ function checkBoundaryPaths(): void {
   const paths: BoundaryPath[] = [
     { name: "napi", noopReturnsUndefined: () => napiNoop() === undefined, add_i32: napiAdd, sum_i32: napiSum },
   ];
+  // Each WASM build is checked through the same copy as its `copy` cases;
+  // `resident` cases call the same exported sum on the same values.
+  for (const [name, binding] of [["wasm", wasm], ["wasm.simd128", wasmSimd]] as const) {
+    if (!binding) continue;
+    paths.push({
+      name,
+      noopReturnsUndefined: () => binding.noop() === undefined,
+      add_i32: binding.add_i32,
+      sum_i32: (d) => wasmSumOnce(binding, d),
+    });
+  }
   if (ffi) {
     paths.push({
       name: "ffi",

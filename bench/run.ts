@@ -1,7 +1,8 @@
 // Runs the benchmark cases in the current runtime (Node.js, Bun or Deno).
 //
 //   node bench/run.ts [--warmup 5] [--samples 30] [--sample-ms 20] [--filter sum_i32 | --case sum_i32/ts/10] [--out file.json]
-//   node bench/run.ts --list [--filter sum_i32] [--suite boundary,payload,return]
+//   node bench/run.ts --list [--filter sum_i32] [--suite boundary,payload,return] [--process-group default|wasm-no-inline]
+//   node --no-turbo-inline-js-wasm-calls bench/run.ts --process-group wasm-no-inline ...
 //   bun  bench/run.ts ...
 //   deno run --allow-read --allow-write --allow-ffi bench/run.ts ...
 
@@ -11,6 +12,12 @@ import process from "node:process";
 import { parseArgs } from "node:util";
 import { buildCaseIds, buildCases, checkEquivalence } from "./common/cases.ts";
 import { parseSuites, suiteOf } from "./common/suites.ts";
+import {
+  parseProcessGroup,
+  type ProcessGroup,
+  processGroupOf,
+  WASM_NO_INLINE_FLAG,
+} from "./common/process-groups.ts";
 import { hrtimeClock } from "./common/clock-hrtime.ts";
 import { measure, type Options } from "./common/harness.ts";
 import { printResults } from "./common/report.ts";
@@ -35,6 +42,22 @@ function cpuAffinity(runtime: string): string | null {
   return readFileSync("/proc/self/status", "utf8").match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? null;
 }
 
+/**
+ * Confirms this process can run `group`. Returns whether the group's V8 flag
+ * was verified (true), not needed (true for default) or not observable (null).
+ */
+function checkProcessGroup(runtime: string, group: ProcessGroup): boolean | null {
+  if (group === "default") return true;
+  if (runtime === "bun") throw new Error("process group wasm-no-inline needs V8 (Node.js or Deno)");
+  // Node.js exposes its flags; Deno takes them through --v8-flags, which
+  // process.execArgv does not show. The orchestrator records the command.
+  if (runtime === "deno") return null;
+  if (!process.execArgv.includes(WASM_NO_INLINE_FLAG)) {
+    throw new Error(`process group wasm-no-inline requires node ${WASM_NO_INLINE_FLAG}`);
+  }
+  return true;
+}
+
 function positiveInt(name: string, value: string): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new Error(`--${name} must be a positive integer, got "${value}"`);
@@ -51,19 +74,24 @@ function main(): void {
       filter: { type: "string" },
       suite: { type: "string" },
       case: { type: "string" },
+      "process-group": { type: "string", default: "default" },
       list: { type: "boolean", default: false },
       out: { type: "string" },
     },
   });
   if (values.filter && values.case) throw new Error("use either --filter or --case, not both");
   const suites = values.suite ? parseSuites(values.suite) : null;
-  const select = (id: string) =>
+  // A process runs the cases of one process group only (see process-groups.ts).
+  const group = parseProcessGroup(values["process-group"]);
+  const selectIgnoringGroup = (id: string) =>
     (!suites || suites.includes(suiteOf(id.split("/")[0]))) &&
     (values.case ? id === values.case : !values.filter || id.includes(values.filter));
+  const select = (id: string) => processGroupOf(id) === group && selectIgnoringGroup(id);
 
   if (values.list) {
-    // Listing constructs no cases, so it allocates no benchmark data.
-    const ids = buildCaseIds().filter(select);
+    // Listing constructs no cases, so it allocates no benchmark data. It
+    // prints every process group's cases (the orchestrator groups them).
+    const ids = buildCaseIds().filter(selectIgnoringGroup);
     console.log(ids.join("\n"));
     return;
   }
@@ -74,6 +102,7 @@ function main(): void {
     sampleMs: positiveInt("sample-ms", values["sample-ms"]),
   };
   const runtime = runtimeName();
+  const v8FlagsVerified = checkProcessGroup(runtime, group);
 
   const cases = buildCases(select);
   if (cases.length === 0) throw new Error(`no case matches ${values.case ?? values.filter ?? values.suite}`);
@@ -106,6 +135,10 @@ function main(): void {
         // Respects the affinity mask in all three runtimes.
         allowedCpuCount: os.availableParallelism(),
         execArgv: process.execArgv,
+        processGroup: group,
+        v8Flags: group === "wasm-no-inline" ? [WASM_NO_INLINE_FLAG] : [],
+        // null: the flag cannot be observed from inside this runtime (Deno).
+        v8FlagsVerified,
       },
       timer: hrtimeClock.name,
       options,
