@@ -61,7 +61,7 @@ Each question is marked with where it is answered today, or with *planned* (see 
 | How does compiled TypeScript with native FFI compare? | scriptc |
 | How do synchronous and asynchronous native calls differ? | *planned* |
 | How expensive are chatty APIs, and how much does batching help? | *planned* |
-| How does WebAssembly compare with native bindings? What does a Web Worker add? | WASM boundary suite in Node.js, Bun and Deno; Worker *planned* |
+| How does WebAssembly compare with native bindings? What does a Web Worker add? | WASM boundary suite in Node.js, Bun, Deno and browsers; Worker paths in browsers |
 | Does binding overhead still matter once real I/O or database work exists? | *planned* (realistic workload suite) |
 
 ## Target matrix
@@ -74,8 +74,8 @@ The long-term goal is to run equivalent workloads on every comparable path:
 | Bun | TypeScript; Node-API → Rust; `bun:ffi` → C ABI → Rust; WASM → Rust | implemented, WASM boundary suite only |
 | Deno | TypeScript; Node-API → Rust; Deno FFI → C ABI → Rust; WASM → Rust | implemented, WASM boundary suite only |
 | scriptc | compiled TypeScript; native FFI → C ABI → Rust | implemented, with gaps ([scriptc.md](scriptc.md)) |
-| Browser | JavaScript → WASM | *planned* |
-| Browser | application → `postMessage`/transfer → Worker → WASM | *planned* |
+| Browser | TypeScript; JavaScript → WASM (main thread) | implemented in Chromium and Firefox, boundary suite ([browser.md](browser.md)) |
+| Browser | application → `postMessage` (clone, copy, transfer) → Worker → TypeScript or WASM | implemented in Chromium and Firefox, boundary suite |
 
 The goal is not to declare a winner, but to understand the **cost profile of each boundary**.
 

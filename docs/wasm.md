@@ -1,6 +1,6 @@
 # WebAssembly
 
-Direct WebAssembly calls under Node.js, Bun and Deno. The module is a `wasm32-unknown-unknown` build of `native/wasm`, a thin ABI over the same `native/rust-core` used by Node-API and FFI. There is no `wasm-bindgen` or other framework, and no browser or Worker path. WASM covers the `boundary` suite.
+Direct WebAssembly calls under Node.js, Bun and Deno. The module is a `wasm32-unknown-unknown` build of `native/wasm`, a thin ABI over the same `native/rust-core` used by Node-API and FFI. There is no `wasm-bindgen` or other framework. WASM covers the `boundary` suite. Browsers load the same artifacts on the main thread and in a Worker ([browser.md](browser.md)).
 
 ## Build
 
@@ -54,6 +54,6 @@ On the reference machine, a copy-only / sum-only / copy+sum decomposition at 10^
 
 - **Payload and return suites.** Copying a buffer merely to read its length would change what `bytes_len` measures; `checksum_bytes` would include a transfer before the scan; strings would need encoding plus a copy. Return paths have the same problem in reverse. They stay deferred until their transfer semantics can be named and compared honestly ([roadmap.md](roadmap.md)).
 - **Start-up.** Process start, module compilation and instantiation are outside timing.
-- **Browsers and Workers.** Planned.
+- **Browsers and Workers.** See [browser.md](browser.md).
 
 WASM buffers are reserved once per case while cases are built, before any timing, and live until the process exits. The typed-array view over linear memory is recreated once per batch, because an allocation can grow the memory and replace `memory.buffer`. Pointers returned by the module are read as unsigned 32-bit numbers.

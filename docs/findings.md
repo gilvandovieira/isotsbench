@@ -21,6 +21,14 @@ Cost profiles observed so far. The sections below give the numbers.
   - the compiled TS loops are slower than the JIT runtimes' steady state, so native code wins from smaller sizes.
 
   See [scriptc](#scriptc).
+- **Browsers reproduce the server WASM profile on the main thread.** Chromium's `wasm.copy`, `wasm.resident` and `simd128` sums match Node.js within about 6%. Firefox's resident sums are within 5–21% of Chromium's. See [Browsers and Workers](#browsers-and-workers).
+- **A Worker round trip costs 8–10 µs before any data moves.** That is thousands of times a main-thread WASM call. For inputs up to 1,000 elements it dominates every Worker path, TypeScript or WASM alike.
+- **How the input reaches a Worker matters more than what runs there.** At 10^6 elements:
+  - a transfer adds about 10 µs;
+  - an explicit copy adds 1.0–1.4 ms;
+  - a structured clone adds 1.8–2.8 ms.
+
+  WASM in a Worker adds its own copy into linear memory (about 200 µs) on top of any of them.
 
 ## Setup
 
@@ -28,7 +36,7 @@ Measured on 2026-09-28:
 
 - **Machine:** i7-12700H (hybrid: CPUs 0–11 are P-cores with SMT pairs; 4–7 boost to 4.7 GHz, the other P-cores to 4.6 GHz; CPUs 12–19 are E-cores at 3.5 GHz).
 - **Settings:** `powersave` governor with intel_pstate EPP `performance`, turbo on.
-- **Software:** Node 24.21.0, Bun 1.4.2, Deno 2.9.7, scriptc 0.1.7.
+- **Software:** Node 24.21.0, Bun 1.4.2, Deno 2.9.7, scriptc 0.1.7; Chrome for Testing 153.0.8010.12 (V8 15.3.76.4) and Firefox 156.0.1, both headless.
 - **Default harness options** unless stated.
 
 ## Methodology evidence
@@ -342,3 +350,93 @@ In Bun, JSC's TS sum (224 µs at 10^6) beats every WASM path that copies. Only r
 ### Withdrawn results
 
 Earlier WASM runs (`2026-09-29T01-11-43-837Z`, `2026-09-29T01-33-33-823Z` and `2026-09-29T01-55-09-419Z`) ran the WASM cases *after* the payload and return suites in each shared process. Their shared-process WASM results are therefore not comparable with the other paths, and are withdrawn. That includes the shared `wasm.copy`/TS ratios reported before, such as 0.641× in Node and 0.985× in Deno (see [methodology.md](methodology.md#canonical-order-is-part-of-the-shared-process-protocol)). Those runs also predate the `resident`, `simd128` and `no-inline` paths, so their fresh-process WASM numbers are superseded by the run above. Their return-path results were not affected and are kept under [Return path](#return-path).
+
+## Browsers and Workers
+
+One official-profile run of every browser path: `results/raw/2026-09-29T09-36-05-415Z`.
+
+- Command: `node scripts/bench-browser.ts --official --cpus 2,8,10 --seed 20260929`.
+- Chromium and Firefox, 3 runs, both modes (a fresh browser per case, and a shared page per browser and thread), 606 pages, about 21 minutes.
+- No failed units and no relaunches. Both browsers were cross-origin isolated, with `performance.now` steps of 5 µs (Chromium) and 20 µs (Firefox).
+- `powersave` and turbo still on, so it is not an official result.
+
+Values are medians of 3 per-run medians, fresh browser per case unless stated. Where they differ from the shared page, both are given as fresh / shared.
+
+### Main thread
+
+| Case | Chromium | Firefox | Node (v0.6.0 run) |
+| --- | ---: | ---: | ---: |
+| `noop/ts` | 0.27 ns | 0.26 ns | 0.28 ns |
+| `noop/wasm.inlineable` | 0.41 ns | 1.72 ns | 0.28 ns |
+| `add_i32/ts` | 0.28 ns | 0.29 ns | – |
+| `add_i32/wasm.inlineable` | 1.99 ns | 1.85 ns | 1.54 ns |
+| `sum_i32/ts/1000000` | 360 / 495 µs | 371 / 390 µs | 3.67 ms / 568 µs |
+| `sum_i32/wasm.copy/1000000` | 356 µs | 454 / 352 µs | 371 µs |
+| `sum_i32/wasm.resident/1000000` | 222 µs | 233 / 220 µs | 237 µs |
+| `sum_i32/wasm.simd128.copy/1000000` | 209 µs | 229 / 214 µs | 223 µs |
+| `sum_i32/wasm.simd128.resident/1000000` | 71.0 µs | 85.9 / 81.8 µs | 70.5 µs |
+
+- **The server-runtime WASM profile holds in browsers.** Chromium's sums are within about 6% of Node.js on the same machine, as the shared engine family suggests. Firefox is 5–21% slower on the resident sums; its fresh-page `wasm.copy` (454 µs) is the outlier.
+  - The copy into linear memory (`copy − resident`) costs 134 µs at 10^6 elements in Chromium. In Firefox it costs 221 µs fresh and 131 µs shared.
+  - `simd128` makes the resident sum 3.1× faster in Chromium and 2.7× in Firefox.
+- **Firefox makes a real WASM call.** `noop/wasm.inlineable` costs 1.72 ns in Firefox, against 0.26 ns for the empty loop. So SpiderMonkey does not remove the call the way V8 does in Node.js. Chromium's 0.41 ns is close to its empty loop (0.27 ns) but not equal to it. Whether V8 inlines the call completely in Chromium is not established from this alone.
+- **V8's JIT-history effect appears in Chromium too.** `sum_i32/ts` at 10k and 100k elements is 7× slower in a fresh browser than in a shared page (35.7 µs vs 4.94 µs, and 357 µs vs 49.4 µs), the same 0.14× ratio as in Node.js and Deno. At 10^6 elements the direction reverses (360 µs fresh, 495 µs shared). Firefox shows no large effect.
+- **Break-even** against each browser's own TS sum, fresh / shared:
+
+  | Path | Chromium | Firefox |
+  | --- | --- | --- |
+  | `wasm.copy` | from 100 | never (fresh, 454 vs 371 µs at 10^6) / from 100 |
+  | `wasm.resident` | from 10 | from 100 |
+  | `wasm.simd128.copy` | from 100 | from 100 |
+  | `wasm.simd128.resident` | from 10 | from 10 |
+
+### Worker round trips
+
+| Case | Chromium | Firefox |
+| --- | ---: | ---: |
+| `noop/worker.ts` | 7.95 µs | 10.4 µs |
+| `noop/worker.wasm` | 7.78 µs | 10.2 µs |
+| `add_i32/worker.ts` | 9.26 µs | 10.8 µs |
+| `add_i32/worker.wasm` | 9.23 µs | 10.9 µs |
+| `sum_i32/worker.wasm.resident/1000` | 8.52 µs | 10.2 µs |
+
+- **The round trip itself costs 8 µs in Chromium and 10.4 µs in Firefox**, with no data and no work. That is about 4,000–6,000 times a main-thread WASM `add_i32`.
+- **Below about 1,000 elements, the round trip is almost the whole cost.** TypeScript or WASM behind it makes no measurable difference. Every path from 1 to 1,000 elements lies between 7.6 and 13.8 µs.
+- **WASM does not make the messaging cheaper.** `noop` and `add_i32` cost the same through `worker.ts` and `worker.wasm`. The two boundaries are independent, and at these sizes the Worker one dominates.
+
+### Moving the input
+
+Costs added to the resident path (`worker.<impl>.<strategy> − worker.<impl>.resident`), fresh browser per case:
+
+| Elements | Strategy | Chromium ts | Chromium wasm | Firefox ts | Firefox wasm |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 10,000 | clone | +28.3 µs | +28.4 µs | +16.0 µs | +16.1 µs |
+| | copy | +16.8 µs | +16.2 µs | +15.1 µs | +15.9 µs |
+| | transfer | +5.4 µs | +4.4 µs | +2.7 µs | +2.7 µs |
+| 1,000,000 | clone | +2.75 ms | +3.04 ms | +1.83 ms | +2.18 ms |
+| | copy | +1.42 ms | +1.71 ms | +0.95 ms | +1.22 ms |
+| | transfer | +11 µs | +190 µs | +9 µs | +217 µs |
+
+- **A transfer costs about the same at every size.** Moving a 4 MB buffer to the Worker and back adds about 10 µs, against 2–5 µs for 4 bytes.
+- **An explicit copy is cheaper than a structured clone of the same bytes.** At 10^6 elements, `slice()` plus a transfer adds 0.95–1.42 ms, and postMessage's clone adds 1.83–2.75 ms. Both give the Worker an independent copy while the caller keeps its array. Why the clone costs more is not established; serialising and deserialising in two steps would explain it.
+- **WASM in a Worker pays a second copy.** The received array must be copied into linear memory, because linear memory cannot adopt a transferred buffer. With `transfer`, that copy is almost the whole transfer cost for WASM (190–217 µs at 10^6, against 11 µs for TS). It is close to the main thread's `copy − resident` (131–221 µs).
+- **Resident input changes the picture.** With input already in the Worker, `worker.wasm.resident/1000000` costs 235 µs in Chromium: less than the main-thread TS sum (360 µs), and about the main-thread `wasm.resident` (222 µs) plus one round trip. With a structured clone the same sum costs 3.28 ms, 9× the main-thread TS sum.
+
+These are latencies of one request at a time. They do not measure what a Worker is usually for, keeping the main thread free, or throughput with several messages in flight (see [limitations](limitations.md#browsers-and-workers)).
+
+### TypeScript inside a Worker
+
+A Worker handler calls the operation once per message; a main-thread loop calls it many times. V8 treats the two differently:
+
+- Chromium's `worker.ts.resident` costs 46 µs at 10k elements, against a 38 µs compute share (resident − round trip). The main thread's shared-page `sum_i32/ts/10000` takes 4.94 µs.
+- At 10^6 elements it costs 511 µs in a fresh browser and 4.89 ms in a shared page, a 9.6× divergence.
+- Firefox's Worker TS costs about what its main-thread loop does (410 µs vs 371 µs at 10^6), in both modes.
+
+### Stability and divergence
+
+- 88 of 396 mode/case results exceeded 5% run-to-run spread. 76 of them are Worker cases (37 Chromium, 39 Firefox), whose ~10 µs round trips depend on two threads waking each other. On the main thread, 4 Chromium and 8 Firefox results exceeded it.
+- 101 cases diverged between fresh and shared pages. Most are Worker cases below 10^5 elements, where the shared page ran 5–15% faster in both browsers. Other divergent cases:
+  - Chromium `sum_i32/ts` at every size: shared 1.2–1.7× fresh up to 1,000 elements, plus the rows above;
+  - Chromium's Worker TS sums at 10^5–10^6 elements, and `worker.wasm.clone/100000` (shared 0.73× fresh);
+  - Firefox `wasm.copy/1000000` (shared 0.77× fresh), and several Firefox main-thread WASM sums where the shared page was 5–10% faster.
+

@@ -1,6 +1,6 @@
 # Limitations
 
-Known caveats of the current implementation. Planned work (datasets, charts, CI, browsers, async, a realistic workload) is in [roadmap.md](roadmap.md).
+Known caveats of the current implementation. Planned work (datasets, charts, CI, async, a realistic workload) is in [roadmap.md](roadmap.md).
 
 ## Measurement
 
@@ -9,7 +9,7 @@ Known caveats of the current implementation. Planned work (datasets, charts, CI,
 - **No statistical test yet.** The 5% threshold is a heuristic. There are no confidence intervals or tests of whether one run differs from another.
 - **GC cost of returned data is included only as it happens.** Garbage from returned strings, buffers and objects is collected whenever the engine decides. Large results can move GC work into or out of individual samples, which shows up as run-to-run spread.
 - **Settings are recorded, not enforced.** The harness warns about the governor, turbo and platform profile but never changes them. Only the user can put a machine into official conditions.
-- **No run has met the official criteria yet.** The pinned official-profile runs behind [findings](findings.md) used the `powersave` governor with turbo enabled. In the latest (the v0.6.0 WebAssembly run), 72 of 332 mode/case results exceeded 5% spread. Their directions are development findings; official publication still needs a prepared machine.
+- **No run has met the official criteria yet.** The pinned official-profile runs behind [findings](findings.md) used the `powersave` governor with turbo enabled. In the v0.6.0 WebAssembly run, 72 of 332 mode/case results exceeded 5% spread; in the v0.7.0 browser run, 88 of 396. Their directions are development findings; official publication still needs a prepared machine.
 - **Pinning includes helper threads.** `taskset` restricts the whole process, so JIT and GC threads compete for the same CPU set. Pinning only the main thread would require code inside each runtime, which the runtimes don't offer in a comparable way.
 - **Deno's affinity is checked by count only**, because of its permission model (see [methodology.md](methodology.md#cpu-pinning-linux)).
 - **Official runs are long.** An official run of every suite and all four runtimes uses about 1,600 processes. Use `--suite` and `--runtimes` to run and publish parts separately; case methodology doesn't change.
@@ -42,6 +42,20 @@ Known caveats of the current implementation. Planned work (datasets, charts, CI,
 - **Deno's no-inline flag cannot be verified from inside the process.** It is passed as `--v8-flags`, which `process.execArgv` does not show; results record `v8FlagsVerified: null`, and the orchestrator records the command.
 - **`sum_i32/wasm.copy` is not a borrowed-buffer call.** It includes a full copy into linear memory per call, while Node-API and FFI borrow the JS array. Its cost and break-even describe the end-to-end WASM path; `wasm.resident` and `simd128` separate transfer from code generation.
 - **WASM input buffers are reserved outside timing**, once per case, and are never freed before the process exits. Process start, module compilation and instantiation are outside timing.
+
+## Browsers and Workers
+
+- **Two browsers, one platform.** Only Chromium (Chrome for Testing 153, V8) and Firefox 156 (SpiderMonkey), headless on Linux x86_64, have been verified. WebKit/Safari and mobile browsers are not covered. Whether headed browsers behave differently is not established.
+- **Coarse clocks.** Browsers clamp `performance.now()`: 5 µs steps in Chromium and 20 µs in Firefox, even cross-origin isolated. At the default 20 ms batch that is at most 0.1%. Shorter `--sample-ms` values raise it, and the orchestrator warns above 0.1%.
+- **A browser is many processes.** Pinning restricts the whole browser to the CPU set: its main process, renderers, GPU and network processes, and the Worker thread. Background work at browser start-up is reduced by launch flags and prefs, not excluded. In fresh-browser mode it can overlap the first batches. Warmup absorbs that only as far as it lasts.
+- **Chromium occasionally stalls at start-up.** Once during development, a freshly launched, pinned Chromium created its page renderer 5 s late. After more than 30 s the page still had not run: the renderer had used no CPU and had no Worker thread. It did not recur in 140 further launches of the benchmark page with the same flags and pinning, or in 60 launches of a trivial page. The cause is not established. The orchestrator relaunches a browser that has not loaded the page within 30 s, before anything is measured, and records `launchAttempts`.
+- **No `wasm.no-inline` in browsers.** It would need engine flags that the page cannot verify, and Firefox has no known equivalent. Whether SpiderMonkey inlines small JS→WASM calls is not established.
+- **Worker paths measure sequential round trips only.** There are no pipelined messages, no `SharedArrayBuffer`/`Atomics` paths, and no payload or return suites. Worker WASM uses the default build only.
+- **Worker round trips include thread wake-ups.** Each request wakes the Worker's thread and each reply wakes the page's, so the latency depends on the scheduler, CPU idle states and frequency governor as well as on the browser. That share is not quantified.
+- **The Worker decomposition is approximate.** Round trip, compute and transfer costs are differences of independent medians. At small sizes they are within the noise of a ~10 µs round trip and can be negative.
+- **Worker compute is not main-thread compute.** A Worker handler calls the operation once per message; a main-thread loop calls it many times in one function. JITs optimise the two differently, so `worker.ts.resident − noop/worker.ts` need not equal `sum_i32/ts`.
+- **Main-thread loops are copies.** `bench/browser/main-cases.ts` repeats the loops of `bench/common/cases.ts`, which cannot be loaded in a browser. The tests check that the case ids and results agree, not that the loop source is identical.
+- **Type stripping uses an experimental Node.js API** (`stripTypeScriptTypes`), which prints an `ExperimentalWarning`. It only erases types, and the code the browser receives keeps its line and column positions.
 
 ## Platforms
 

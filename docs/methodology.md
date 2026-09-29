@@ -6,6 +6,8 @@ How measurements are taken, isolated, controlled, checked and recorded. What is 
 
 `bench/` is plain TypeScript run directly by Node.js 24+ (built-in type stripping), Bun and Deno. It uses only erasable syntax and `node:` built-ins; nothing is transpiled or bundled. These runtimes load the same WASM artifacts (default and `simd128` builds) through direct `WebAssembly` APIs. `bench/scriptc/` and the shared modules it imports are additionally compiled by scriptc.
 
+Browsers run `bench/browser/` and the shared modules it imports. A local server strips their types with Node's `stripTypeScriptTypes` and serves them unbundled; see [Browsers and Workers](#browsers-and-workers).
+
 ## Measurement inside one process
 
 For each case, in `bench/common/harness.ts`:
@@ -42,7 +44,7 @@ Once timing is done, `checkEquivalence()` checks that every available native or 
   - `return_bytes` at every size plus 0, compared byte for byte with the TS result. Each must be a `Uint8Array` at offset 0 that owns a whole `ArrayBuffer` of exactly its size (not a view into a pool or into native memory), and two results must be independent.
   - Every row strategy at every count plus 0, compared field by field with the TS rows, including property order.
 
-For WASM, the boundary check covers both builds, with the same copy into linear memory as the `copy` paths.
+For WASM, the boundary check covers both builds, with the same copy into linear memory as the `copy` paths. Browser pages run the same boundary check on the main thread. They send the same inputs through every Worker path and also check each strategy's ownership claims ([browser.md](browser.md#correctness)).
 
 A process that measured payload cases generates and scans the 16 MiB payloads, which takes about 0.7–1 s; other processes skip that. All of this runs after timing and is not measured.
 
@@ -87,6 +89,20 @@ Some diagnostics need the engine started with different flags, currently `wasm.n
 So a flag never changes what another case measures. `bench/run.ts --process-group` selects the group, and `environment.json → methodology.processGroupCommands` records the exact commands. Each result records `process.processGroup`, the `v8Flags` requested, and whether they were verified inside the process: `true`, or `null` where the runtime cannot show them (Deno's `--v8-flags`).
 
 Within each repetition, `--order shuffle` (the default) randomly permutes all units across runtimes, cases and isolation modes. The permutation comes from a seeded PRNG (mulberry32), so `--seed` from `environment.json` reproduces the schedule exactly. Shuffling stops slow drifts (temperature, background load, turbo headroom) from always landing on the same runtime or case. Every result records its `run` and `sequence` (position in the schedule), so order effects can be analysed afterwards.
+
+## Browsers and Workers
+
+`scripts/bench-browser.ts` applies the same principles in Chromium and Firefox. [browser.md](browser.md) has the details.
+
+- **Same protocol.** Calibrate, warmup and samples, with raw `warmup_ns` and `samples_ns`, the same statistics and the same options. Main-thread cases use `harness.ts` itself. Worker cases use a copy of its protocol for batches that complete asynchronously.
+- **Clock.** `performance.now()` on the page's main thread. Pages are served cross-origin isolated, which gives the finest resolution browsers allow. Each page records the step it observed (5 µs in Chromium and 20 µs in Firefox on the reference machine: at most 0.1% of a 20 ms batch). The orchestrator warns when a page is not isolated or its step exceeds 0.1% of a batch.
+- **Isolation.** `case` is a fresh browser with a fresh profile per case; `runtime` is one page per browser and thread, in canonical order. `both`, `--runs`, the seeded shuffle and `--cpus` work as above. Pinning covers the whole browser process group, and every process in it is verified.
+- **Threads are never mixed.** A page measures main-thread cases or Worker cases, never both. They are written to separate files (`<browser>.main.json`, `<browser>.worker.json`) and summarised in separate tables.
+- **Worker messaging is its own boundary.** It is never reported as part of a WASM call. Each Worker path names how its input moves (`clone`, `copy`, `transfer`) or that it does not move (`resident`). The orchestrator prints the round trip, the work behind it and each strategy's transfer cost as separate numbers.
+- **Correctness after measurement,** per thread, as above. A failed check fails the unit, and its results are discarded.
+- **Artifacts.** Each page hashes the WASM bytes it fetched, in the page and in the Worker. A run stops if they differ from the artifacts it built and recorded.
+
+Browser runs are separate run directories. They do not change any server-runtime result, and `scripts/compare.ts` reads them like server runs.
 
 ## CPU pinning (Linux)
 
@@ -171,6 +187,8 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
     - measurement: `iterations`, raw `warmup_ns` and `samples_ns`, derived `ns_per_op` statistics and `ops_per_s`
 
 Raw sample arrays are copied unchanged from each process's output into these files.
+
+Browser runs write `environment.json` with `kind: "browser"`, plus `<browser>.main.json` and `<browser>.worker.json`. Their extra metadata includes browser and engine versions, page-reported user agent, timer and isolation, fetched artifact hashes, WASM target features and the Worker configuration; see [browser.md](browser.md#recorded-metadata).
 
 ## Publishing results
 

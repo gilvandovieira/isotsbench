@@ -1,6 +1,6 @@
 # Marshalling and ownership
 
-How data crosses each boundary, in both directions, on the Node-API and Bun/Deno FFI paths: what is copied, borrowed, converted or allocated, who owns results, and the native libraries behind them. scriptc's FFI is described in [scriptc.md](scriptc.md); the separate WASM linear-memory transfer is described in [wasm.md](wasm.md).
+How data crosses each boundary, in both directions, on the Node-API and Bun/Deno FFI paths: what is copied, borrowed, converted or allocated, who owns results, and the native libraries behind them. scriptc's FFI is described in [scriptc.md](scriptc.md); the separate WASM linear-memory transfer is described in [wasm.md](wasm.md), and browser Worker messages (structured clone, copy, transfer) in [browser.md](browser.md#the-three-ways-of-moving-a-buffer).
 
 ## How data crosses each boundary
 

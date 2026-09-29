@@ -44,12 +44,22 @@ Every operation runs through each path its runtime supports:
 | `ffi`: FFI → C ABI → Rust | no | yes | yes | partial | `bun:ffi` / `Deno.dlopen` / `scriptc-ffi` |
 | `wasm`: WebAssembly → Rust | boundary | boundary | boundary | no | `WebAssembly` / `WebAssembly+simd128` |
 
+Browsers (Chromium, Firefox) run the boundary suite in two separate groups ([browser.md](browser.md)):
+
+| Path | Browser main thread | main → Worker → main | `binding` recorded |
+| --- | --- | --- | --- |
+| `ts` | yes | `worker.ts`, `worker.ts.<strategy>` | `none` |
+| `wasm` | `wasm.inlineable`, `wasm.copy`, `wasm.resident`, `wasm.simd128.*` | `worker.wasm`, `worker.wasm.<strategy>` | `WebAssembly` / `WebAssembly+simd128` |
+
+In a Worker path, `binding` names what the code inside the Worker crosses. The message to and from the Worker is described by `strategy` and `ownership`, never as a binding.
+
 - Node.js has no stable FFI, so it has no `ffi` path.
 - scriptc has no JavaScript engine, so it has no Node-API path.
 - scriptc's FFI covers only part of the matrix; see [scriptc](scriptc.md).
 - WASM covers the `boundary` suite only, when the `wasm32-unknown-unknown` target is installed. See [WebAssembly](wasm.md).
+- Browsers have neither Node-API nor FFI. `wasm.no-inline` needs engine flags and is not run there.
 
-All calls are synchronous. There are no browser, Worker, async or SQLite paths yet.
+Every call on a server runtime or a browser main thread is synchronous. A Worker path's operation is a message round trip, timed as a batch of sequential round trips on the main thread. There are no async native calls or SQLite paths yet.
 
 Case ids are `op/path[/variant][/size]`, for example:
 
@@ -58,6 +68,7 @@ Case ids are `op/path[/variant][/size]`, for example:
 - `return_rows/napi.objects/100`
 - `sum_i32/wasm.copy/1000`
 - `noop/wasm.no-inline`
+- `sum_i32/worker.wasm.transfer/1000`
 
 The path is the `impl` (`ts`, `napi`, `ffi` or `wasm`), extended by a strategy name when a binding's representation or transfer semantics need to be distinguished:
 
@@ -69,6 +80,11 @@ The path is the `impl` (`ts`, `napi`, `ffi` or `wasm`), extended by a strategy n
   - `wasm.copy` copies the array into linear memory on every call;
   - `wasm.resident` uses input that is already there;
   - `wasm.simd128.*` runs the same source built with SIMD.
+- A Worker path starts with `worker.`, then names the code run inside the Worker (`ts`, `wasm`) and how the input reaches it:
+  - `clone`: structured clone;
+  - `copy`: an explicit copy, transferred;
+  - `transfer`: the caller's own buffer, moved there and back;
+  - `resident`: the input already lives in the Worker.
 
 Each result also records:
 
@@ -77,8 +93,8 @@ Each result also records:
 - `size`: elements for `sum_i32`, rows for `return_rows`, payload bytes otherwise
 - `variant`: `ascii` or `utf8` for string operations, null otherwise
 - `payload`: `{ kind, bytes }`, or `{ kind: "rows", count }` for rows. `kind` is one of `int32array`, `uint8array`, `string-ascii`, `string-utf8` or `rows`. Null for scalar cases.
-- `strategy`: `objects` or `packed` for rows, `borrowed` for scriptc's string ingress, `inlineable` / `no-inline` for WASM calls, `copy` / `resident` for WASM array input, null otherwise
-- `ownership`: who allocates, fills, copies or borrows the data, for return cases, scriptc FFI and WASM array ingress (see [marshalling.md](marshalling.md), [scriptc.md](scriptc.md) and [wasm.md](wasm.md)). Null otherwise.
+- `strategy`: `objects` or `packed` for rows, `borrowed` for scriptc's string ingress, `inlineable` / `no-inline` for WASM calls, `copy` / `resident` for WASM array input, `clone` / `copy` / `transfer` / `resident` for Worker messages, null otherwise
+- `ownership`: who allocates, fills, copies, moves or borrows the data, for return cases, scriptc FFI, WASM array ingress and Worker paths (see [marshalling.md](marshalling.md), [scriptc.md](scriptc.md), [wasm.md](wasm.md) and [browser.md](browser.md)). Null otherwise.
 
 Result files written by older versions lack the fields that did not exist yet; `scripts/compare.ts` still reads them:
 
@@ -105,6 +121,7 @@ Strings are built by joining chunks with `Array.prototype.join`, so they are fla
   - `noop/wasm.inlineable` can be an empty loop after V8 inlines the call. Read it next to `wasm.no-inline`, which measures the call itself (Node.js and Deno).
   - `sum_i32/wasm.copy` includes a per-call copy into linear memory, while Node-API and FFI borrow the JS buffer.
   - `wasm.resident` and the `simd128` paths separate that transfer from code generation. See [wasm.md](wasm.md).
+- **Worker paths** are round-trip latencies of about 10 µs and up, not call costs. Read them against `noop/worker.ts` (messaging alone) and the `resident` paths (no data moved), not against the main-thread `ts` ratio. See [browser.md](browser.md#reading-the-worker-numbers).
 - **Break-even** is the smallest measured size from which native is faster than TS at that size *and every larger measured size*. The sizes are decades (payload sizes step by up to 64×), so the true crossover lies somewhere between the reported size and the one below it. The summary prints a break-even table for every sized operation. `never` means native never became and stayed faster within the measured sizes.
 - **Data rate** is payload bytes ÷ median time per call, shown for every case whose operation reads its payload. `bytes_len` never reads its bytes, and its time does not depend on the size. It measures only the hand-over, so its data rate is shown as `-`.
 - **`bytes_len`** has a trivial TS baseline (`data.byteLength`, inlined to almost nothing). Like `noop`, the meaningful number is the absolute native cost of handing over a buffer, and whether it stays constant across sizes.
