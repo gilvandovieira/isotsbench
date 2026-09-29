@@ -1,0 +1,951 @@
+{
+  "runId": "2026-09-29T11-49-48-358Z",
+  "kind": "browser",
+  "createdAt": "2026-09-29T11:49:48.358Z",
+  "finishedAt": "2026-09-29T12:15:47.923Z",
+  "cpu": {
+    "model": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "cores": 20,
+    "arch": "x64"
+  },
+  "memoryBytes": 16359882752,
+  "os": {
+    "platform": "linux",
+    "type": "Linux",
+    "release": "7.2.8-1-cachyos",
+    "version": "#1 SMP PREEMPT_DYNAMIC Sat, 26 Sep 2026 19:43:45 +0000"
+  },
+  "system": {
+    "platform": "linux",
+    "supported": true,
+    "onlineCpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "cpus": [
+      {
+        "cpu": 0,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 0,
+        "packageId": 0,
+        "smtSiblings": [
+          0,
+          1
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 1,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 0,
+        "packageId": 0,
+        "smtSiblings": [
+          0,
+          1
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 2,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 4,
+        "packageId": 0,
+        "smtSiblings": [
+          2,
+          3
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 3,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 4,
+        "packageId": 0,
+        "smtSiblings": [
+          2,
+          3
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 4,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 8,
+        "packageId": 0,
+        "smtSiblings": [
+          4,
+          5
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 5,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 8,
+        "packageId": 0,
+        "smtSiblings": [
+          4,
+          5
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 6,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 12,
+        "packageId": 0,
+        "smtSiblings": [
+          6,
+          7
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 7,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 12,
+        "packageId": 0,
+        "smtSiblings": [
+          6,
+          7
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 8,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 16,
+        "packageId": 0,
+        "smtSiblings": [
+          8,
+          9
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 9,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 16,
+        "packageId": 0,
+        "smtSiblings": [
+          8,
+          9
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 10,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 20,
+        "packageId": 0,
+        "smtSiblings": [
+          10,
+          11
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 11,
+        "coreType": "P-core",
+        "maxFreqKHz": 2300000,
+        "capacity": 1024,
+        "coreId": 20,
+        "packageId": 0,
+        "smtSiblings": [
+          10,
+          11
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 12,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 24,
+        "packageId": 0,
+        "smtSiblings": [
+          12
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 13,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 25,
+        "packageId": 0,
+        "smtSiblings": [
+          13
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 14,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 26,
+        "packageId": 0,
+        "smtSiblings": [
+          14
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 15,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 27,
+        "packageId": 0,
+        "smtSiblings": [
+          15
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 16,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 28,
+        "packageId": 0,
+        "smtSiblings": [
+          16
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 17,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 29,
+        "packageId": 0,
+        "smtSiblings": [
+          17
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 18,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 30,
+        "packageId": 0,
+        "smtSiblings": [
+          18
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      },
+      {
+        "cpu": 19,
+        "coreType": "E-core",
+        "maxFreqKHz": 1700000,
+        "capacity": 1024,
+        "coreId": 31,
+        "packageId": 0,
+        "smtSiblings": [
+          19
+        ],
+        "governor": "performance",
+        "energyPerformancePreference": "performance"
+      }
+    ],
+    "cpuClasses": [
+      {
+        "key": "P-core, 2300 MHz, capacity 1024",
+        "cpus": "0-11"
+      },
+      {
+        "key": "E-core, 1700 MHz, capacity 1024",
+        "cpus": "12-19"
+      }
+    ],
+    "heterogeneous": true,
+    "scalingDriver": "intel_pstate",
+    "intelPstate": {
+      "status": "active",
+      "noTurbo": "1"
+    },
+    "cpufreqBoost": null,
+    "smtActive": "1",
+    "platformProfile": "performance"
+  },
+  "loadavg": {
+    "start": [
+      1.36,
+      1.17,
+      1.14
+    ],
+    "end": [
+      3.37,
+      3.54,
+      3.13
+    ]
+  },
+  "runtimes": {
+    "chromium.main": "Google Chrome for Testing 153.0.8010.12",
+    "chromium.worker": "Google Chrome for Testing 153.0.8010.12",
+    "firefox.main": "Mozilla Firefox 156.0.1",
+    "firefox.worker": "Mozilla Firefox 156.0.1"
+  },
+  "browsers": {
+    "chromium": {
+      "path": "/home/g/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+      "version": "Google Chrome for Testing 153.0.8010.12",
+      "engine": {
+        "name": "V8",
+        "version": "15.3.76.4",
+        "source": "DevTools /json/version of a separate launch"
+      },
+      "command": [
+        "taskset",
+        "-c",
+        "2,8,10",
+        "/home/g/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+        "--headless=new",
+        "--user-data-dir=<fresh-profile>",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-sync",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "<page-url>"
+      ],
+      "page": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "userAgentData": {
+          "architecture": "x86",
+          "bitness": "64",
+          "brands": [
+            {
+              "brand": "Chromium",
+              "version": "153"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "8"
+            }
+          ],
+          "fullVersionList": [
+            {
+              "brand": "Chromium",
+              "version": "153.0.8010.12"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "8.0.0.0"
+            }
+          ],
+          "mobile": false,
+          "platform": "Linux",
+          "platformVersion": ""
+        },
+        "hardwareConcurrency": 20,
+        "crossOriginIsolated": true,
+        "timer": {
+          "name": "performance.now",
+          "minNs": 5000,
+          "medianNs": 5000
+        },
+        "wasm": [
+          {
+            "variant": "default",
+            "url": "/build/isotsbench.wasm",
+            "sizeBytes": 20232,
+            "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897",
+            "error": null
+          },
+          {
+            "variant": "simd128",
+            "url": "/build/isotsbench-simd128.wasm",
+            "sizeBytes": 20293,
+            "sha256": "ee5646017cb1a008d03ea20e1a1c02bc3122b073397419b02e890fe66218536d",
+            "error": null
+          }
+        ]
+      },
+      "workerWasm": {
+        "variant": "default",
+        "url": "/build/isotsbench.wasm",
+        "sizeBytes": 20232,
+        "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897",
+        "error": null
+      }
+    },
+    "firefox": {
+      "path": "firefox",
+      "version": "Mozilla Firefox 156.0.1",
+      "engine": {
+        "name": "SpiderMonkey",
+        "version": "156.0.1",
+        "source": "firefox --version"
+      },
+      "command": [
+        "taskset",
+        "-c",
+        "2,8,10",
+        "firefox",
+        "--headless",
+        "--no-remote",
+        "--profile",
+        "<fresh-profile>",
+        "<page-url>"
+      ],
+      "prefs": {
+        "browser.shell.checkDefaultBrowser": false,
+        "browser.aboutwelcome.enabled": false,
+        "browser.startup.homepage_override.mstone": "ignore",
+        "datareporting.policy.dataSubmissionEnabled": false,
+        "toolkit.telemetry.reportingpolicy.firstRun": false,
+        "app.update.auto": false,
+        "extensions.update.enabled": false,
+        "browser.safebrowsing.malware.enabled": false,
+        "browser.safebrowsing.phishing.enabled": false,
+        "network.captive-portal-service.enabled": false,
+        "network.connectivity-service.enabled": false
+      },
+      "page": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0",
+        "userAgentData": null,
+        "hardwareConcurrency": 20,
+        "crossOriginIsolated": true,
+        "timer": {
+          "name": "performance.now",
+          "minNs": 20000,
+          "medianNs": 20000
+        },
+        "wasm": [
+          {
+            "variant": "default",
+            "url": "/build/isotsbench.wasm",
+            "sizeBytes": 20232,
+            "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897",
+            "error": null
+          },
+          {
+            "variant": "simd128",
+            "url": "/build/isotsbench-simd128.wasm",
+            "sizeBytes": 20293,
+            "sha256": "ee5646017cb1a008d03ea20e1a1c02bc3122b073397419b02e890fe66218536d",
+            "error": null
+          }
+        ]
+      },
+      "workerWasm": {
+        "variant": "default",
+        "url": "/build/isotsbench.wasm",
+        "sizeBytes": 20232,
+        "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897",
+        "error": null
+      }
+    }
+  },
+  "server": {
+    "node": "v24.21.0",
+    "origin": "http://127.0.0.1:<ephemeral port>",
+    "headers": {
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-embedder-policy": "require-corp",
+      "cache-control": "no-store"
+    },
+    "typescript": "node:module stripTypeScriptTypes, mode strip (type erasure only, no bundling)"
+  },
+  "rust": {
+    "rustc": "1.98.1",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "rustflags": null
+  },
+  "wasm": {
+    "target": "wasm32-unknown-unknown",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "default": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--target",
+        "wasm32-unknown-unknown",
+        "-p",
+        "isotsbench-wasm",
+        "--target-dir",
+        "target"
+      ],
+      "rustflags": null,
+      "artifact": {
+        "path": "build/isotsbench.wasm",
+        "sizeBytes": 20232,
+        "sha256": "f3eb61e687b25f7abfd7c324396b317d88639d57c2585a08c31b2e802ec04897"
+      }
+    },
+    "simd128": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--target",
+        "wasm32-unknown-unknown",
+        "-p",
+        "isotsbench-wasm",
+        "--target-dir",
+        "target/wasm-simd128"
+      ],
+      "rustflags": "-C target-feature=+simd128",
+      "artifact": {
+        "path": "build/isotsbench-simd128.wasm",
+        "sizeBytes": 20293,
+        "sha256": "ee5646017cb1a008d03ea20e1a1c02bc3122b073397419b02e890fe66218536d"
+      }
+    },
+    "targetFeatures": {
+      "default": [
+        "+bulk-memory",
+        "+bulk-memory-opt",
+        "+call-indirect-overlong",
+        "+multivalue",
+        "+mutable-globals",
+        "+nontrapping-fptoint",
+        "+reference-types",
+        "+sign-ext"
+      ],
+      "simd128": [
+        "+bulk-memory",
+        "+bulk-memory-opt",
+        "+call-indirect-overlong",
+        "+multivalue",
+        "+mutable-globals",
+        "+nontrapping-fptoint",
+        "+reference-types",
+        "+sign-ext",
+        "+simd128"
+      ]
+    }
+  },
+  "git": {
+    "commit": "da569f4299c5c6b1c8556cb8d607138d0b829719",
+    "dirty": false
+  },
+  "methodology": {
+    "profile": "official",
+    "isolation": "both",
+    "isolationMeaning": {
+      "case": "a fresh browser and profile per case",
+      "runtime": "one page per browser and thread, cases in canonical order"
+    },
+    "runs": 3,
+    "order": "shuffle",
+    "seed": 4281897143,
+    "cpus": "2,8,10",
+    "pinning": {
+      "tool": "taskset de util-linux 2.42.4",
+      "command": [
+        "taskset",
+        "-c",
+        "2,8,10"
+      ],
+      "scope": "the whole browser process group"
+    },
+    "threads": [
+      "main",
+      "worker"
+    ],
+    "filter": null,
+    "cases": [
+      "noop/ts",
+      "noop/wasm.inlineable",
+      "add_i32/ts",
+      "add_i32/wasm.inlineable",
+      "sum_i32/ts/1",
+      "sum_i32/wasm.copy/1",
+      "sum_i32/wasm.resident/1",
+      "sum_i32/wasm.simd128.copy/1",
+      "sum_i32/wasm.simd128.resident/1",
+      "sum_i32/ts/10",
+      "sum_i32/wasm.copy/10",
+      "sum_i32/wasm.resident/10",
+      "sum_i32/wasm.simd128.copy/10",
+      "sum_i32/wasm.simd128.resident/10",
+      "sum_i32/ts/100",
+      "sum_i32/wasm.copy/100",
+      "sum_i32/wasm.resident/100",
+      "sum_i32/wasm.simd128.copy/100",
+      "sum_i32/wasm.simd128.resident/100",
+      "sum_i32/ts/1000",
+      "sum_i32/wasm.copy/1000",
+      "sum_i32/wasm.resident/1000",
+      "sum_i32/wasm.simd128.copy/1000",
+      "sum_i32/wasm.simd128.resident/1000",
+      "sum_i32/ts/10000",
+      "sum_i32/wasm.copy/10000",
+      "sum_i32/wasm.resident/10000",
+      "sum_i32/wasm.simd128.copy/10000",
+      "sum_i32/wasm.simd128.resident/10000",
+      "sum_i32/ts/100000",
+      "sum_i32/wasm.copy/100000",
+      "sum_i32/wasm.resident/100000",
+      "sum_i32/wasm.simd128.copy/100000",
+      "sum_i32/wasm.simd128.resident/100000",
+      "sum_i32/ts/1000000",
+      "sum_i32/wasm.copy/1000000",
+      "sum_i32/wasm.resident/1000000",
+      "sum_i32/wasm.simd128.copy/1000000",
+      "sum_i32/wasm.simd128.resident/1000000",
+      "noop/worker.ts",
+      "noop/worker.wasm",
+      "add_i32/worker.ts",
+      "add_i32/worker.wasm",
+      "sum_i32/worker.ts.clone/1",
+      "sum_i32/worker.ts.copy/1",
+      "sum_i32/worker.ts.transfer/1",
+      "sum_i32/worker.ts.resident/1",
+      "sum_i32/worker.wasm.clone/1",
+      "sum_i32/worker.wasm.copy/1",
+      "sum_i32/worker.wasm.transfer/1",
+      "sum_i32/worker.wasm.resident/1",
+      "sum_i32/worker.ts.clone/10",
+      "sum_i32/worker.ts.copy/10",
+      "sum_i32/worker.ts.transfer/10",
+      "sum_i32/worker.ts.resident/10",
+      "sum_i32/worker.wasm.clone/10",
+      "sum_i32/worker.wasm.copy/10",
+      "sum_i32/worker.wasm.transfer/10",
+      "sum_i32/worker.wasm.resident/10",
+      "sum_i32/worker.ts.clone/100",
+      "sum_i32/worker.ts.copy/100",
+      "sum_i32/worker.ts.transfer/100",
+      "sum_i32/worker.ts.resident/100",
+      "sum_i32/worker.wasm.clone/100",
+      "sum_i32/worker.wasm.copy/100",
+      "sum_i32/worker.wasm.transfer/100",
+      "sum_i32/worker.wasm.resident/100",
+      "sum_i32/worker.ts.clone/1000",
+      "sum_i32/worker.ts.copy/1000",
+      "sum_i32/worker.ts.transfer/1000",
+      "sum_i32/worker.ts.resident/1000",
+      "sum_i32/worker.wasm.clone/1000",
+      "sum_i32/worker.wasm.copy/1000",
+      "sum_i32/worker.wasm.transfer/1000",
+      "sum_i32/worker.wasm.resident/1000",
+      "sum_i32/worker.ts.clone/10000",
+      "sum_i32/worker.ts.copy/10000",
+      "sum_i32/worker.ts.transfer/10000",
+      "sum_i32/worker.ts.resident/10000",
+      "sum_i32/worker.wasm.clone/10000",
+      "sum_i32/worker.wasm.copy/10000",
+      "sum_i32/worker.wasm.transfer/10000",
+      "sum_i32/worker.wasm.resident/10000",
+      "sum_i32/worker.ts.clone/100000",
+      "sum_i32/worker.ts.copy/100000",
+      "sum_i32/worker.ts.transfer/100000",
+      "sum_i32/worker.ts.resident/100000",
+      "sum_i32/worker.wasm.clone/100000",
+      "sum_i32/worker.wasm.copy/100000",
+      "sum_i32/worker.wasm.transfer/100000",
+      "sum_i32/worker.wasm.resident/100000",
+      "sum_i32/worker.ts.clone/1000000",
+      "sum_i32/worker.ts.copy/1000000",
+      "sum_i32/worker.ts.transfer/1000000",
+      "sum_i32/worker.ts.resident/1000000",
+      "sum_i32/worker.wasm.clone/1000000",
+      "sum_i32/worker.wasm.copy/1000000",
+      "sum_i32/worker.wasm.transfer/1000000",
+      "sum_i32/worker.wasm.resident/1000000"
+    ],
+    "casesByRuntime": {
+      "chromium.main": [
+        "noop/ts",
+        "noop/wasm.inlineable",
+        "add_i32/ts",
+        "add_i32/wasm.inlineable",
+        "sum_i32/ts/1",
+        "sum_i32/wasm.copy/1",
+        "sum_i32/wasm.resident/1",
+        "sum_i32/wasm.simd128.copy/1",
+        "sum_i32/wasm.simd128.resident/1",
+        "sum_i32/ts/10",
+        "sum_i32/wasm.copy/10",
+        "sum_i32/wasm.resident/10",
+        "sum_i32/wasm.simd128.copy/10",
+        "sum_i32/wasm.simd128.resident/10",
+        "sum_i32/ts/100",
+        "sum_i32/wasm.copy/100",
+        "sum_i32/wasm.resident/100",
+        "sum_i32/wasm.simd128.copy/100",
+        "sum_i32/wasm.simd128.resident/100",
+        "sum_i32/ts/1000",
+        "sum_i32/wasm.copy/1000",
+        "sum_i32/wasm.resident/1000",
+        "sum_i32/wasm.simd128.copy/1000",
+        "sum_i32/wasm.simd128.resident/1000",
+        "sum_i32/ts/10000",
+        "sum_i32/wasm.copy/10000",
+        "sum_i32/wasm.resident/10000",
+        "sum_i32/wasm.simd128.copy/10000",
+        "sum_i32/wasm.simd128.resident/10000",
+        "sum_i32/ts/100000",
+        "sum_i32/wasm.copy/100000",
+        "sum_i32/wasm.resident/100000",
+        "sum_i32/wasm.simd128.copy/100000",
+        "sum_i32/wasm.simd128.resident/100000",
+        "sum_i32/ts/1000000",
+        "sum_i32/wasm.copy/1000000",
+        "sum_i32/wasm.resident/1000000",
+        "sum_i32/wasm.simd128.copy/1000000",
+        "sum_i32/wasm.simd128.resident/1000000"
+      ],
+      "chromium.worker": [
+        "noop/worker.ts",
+        "noop/worker.wasm",
+        "add_i32/worker.ts",
+        "add_i32/worker.wasm",
+        "sum_i32/worker.ts.clone/1",
+        "sum_i32/worker.ts.copy/1",
+        "sum_i32/worker.ts.transfer/1",
+        "sum_i32/worker.ts.resident/1",
+        "sum_i32/worker.wasm.clone/1",
+        "sum_i32/worker.wasm.copy/1",
+        "sum_i32/worker.wasm.transfer/1",
+        "sum_i32/worker.wasm.resident/1",
+        "sum_i32/worker.ts.clone/10",
+        "sum_i32/worker.ts.copy/10",
+        "sum_i32/worker.ts.transfer/10",
+        "sum_i32/worker.ts.resident/10",
+        "sum_i32/worker.wasm.clone/10",
+        "sum_i32/worker.wasm.copy/10",
+        "sum_i32/worker.wasm.transfer/10",
+        "sum_i32/worker.wasm.resident/10",
+        "sum_i32/worker.ts.clone/100",
+        "sum_i32/worker.ts.copy/100",
+        "sum_i32/worker.ts.transfer/100",
+        "sum_i32/worker.ts.resident/100",
+        "sum_i32/worker.wasm.clone/100",
+        "sum_i32/worker.wasm.copy/100",
+        "sum_i32/worker.wasm.transfer/100",
+        "sum_i32/worker.wasm.resident/100",
+        "sum_i32/worker.ts.clone/1000",
+        "sum_i32/worker.ts.copy/1000",
+        "sum_i32/worker.ts.transfer/1000",
+        "sum_i32/worker.ts.resident/1000",
+        "sum_i32/worker.wasm.clone/1000",
+        "sum_i32/worker.wasm.copy/1000",
+        "sum_i32/worker.wasm.transfer/1000",
+        "sum_i32/worker.wasm.resident/1000",
+        "sum_i32/worker.ts.clone/10000",
+        "sum_i32/worker.ts.copy/10000",
+        "sum_i32/worker.ts.transfer/10000",
+        "sum_i32/worker.ts.resident/10000",
+        "sum_i32/worker.wasm.clone/10000",
+        "sum_i32/worker.wasm.copy/10000",
+        "sum_i32/worker.wasm.transfer/10000",
+        "sum_i32/worker.wasm.resident/10000",
+        "sum_i32/worker.ts.clone/100000",
+        "sum_i32/worker.ts.copy/100000",
+        "sum_i32/worker.ts.transfer/100000",
+        "sum_i32/worker.ts.resident/100000",
+        "sum_i32/worker.wasm.clone/100000",
+        "sum_i32/worker.wasm.copy/100000",
+        "sum_i32/worker.wasm.transfer/100000",
+        "sum_i32/worker.wasm.resident/100000",
+        "sum_i32/worker.ts.clone/1000000",
+        "sum_i32/worker.ts.copy/1000000",
+        "sum_i32/worker.ts.transfer/1000000",
+        "sum_i32/worker.ts.resident/1000000",
+        "sum_i32/worker.wasm.clone/1000000",
+        "sum_i32/worker.wasm.copy/1000000",
+        "sum_i32/worker.wasm.transfer/1000000",
+        "sum_i32/worker.wasm.resident/1000000"
+      ],
+      "firefox.main": [
+        "noop/ts",
+        "noop/wasm.inlineable",
+        "add_i32/ts",
+        "add_i32/wasm.inlineable",
+        "sum_i32/ts/1",
+        "sum_i32/wasm.copy/1",
+        "sum_i32/wasm.resident/1",
+        "sum_i32/wasm.simd128.copy/1",
+        "sum_i32/wasm.simd128.resident/1",
+        "sum_i32/ts/10",
+        "sum_i32/wasm.copy/10",
+        "sum_i32/wasm.resident/10",
+        "sum_i32/wasm.simd128.copy/10",
+        "sum_i32/wasm.simd128.resident/10",
+        "sum_i32/ts/100",
+        "sum_i32/wasm.copy/100",
+        "sum_i32/wasm.resident/100",
+        "sum_i32/wasm.simd128.copy/100",
+        "sum_i32/wasm.simd128.resident/100",
+        "sum_i32/ts/1000",
+        "sum_i32/wasm.copy/1000",
+        "sum_i32/wasm.resident/1000",
+        "sum_i32/wasm.simd128.copy/1000",
+        "sum_i32/wasm.simd128.resident/1000",
+        "sum_i32/ts/10000",
+        "sum_i32/wasm.copy/10000",
+        "sum_i32/wasm.resident/10000",
+        "sum_i32/wasm.simd128.copy/10000",
+        "sum_i32/wasm.simd128.resident/10000",
+        "sum_i32/ts/100000",
+        "sum_i32/wasm.copy/100000",
+        "sum_i32/wasm.resident/100000",
+        "sum_i32/wasm.simd128.copy/100000",
+        "sum_i32/wasm.simd128.resident/100000",
+        "sum_i32/ts/1000000",
+        "sum_i32/wasm.copy/1000000",
+        "sum_i32/wasm.resident/1000000",
+        "sum_i32/wasm.simd128.copy/1000000",
+        "sum_i32/wasm.simd128.resident/1000000"
+      ],
+      "firefox.worker": [
+        "noop/worker.ts",
+        "noop/worker.wasm",
+        "add_i32/worker.ts",
+        "add_i32/worker.wasm",
+        "sum_i32/worker.ts.clone/1",
+        "sum_i32/worker.ts.copy/1",
+        "sum_i32/worker.ts.transfer/1",
+        "sum_i32/worker.ts.resident/1",
+        "sum_i32/worker.wasm.clone/1",
+        "sum_i32/worker.wasm.copy/1",
+        "sum_i32/worker.wasm.transfer/1",
+        "sum_i32/worker.wasm.resident/1",
+        "sum_i32/worker.ts.clone/10",
+        "sum_i32/worker.ts.copy/10",
+        "sum_i32/worker.ts.transfer/10",
+        "sum_i32/worker.ts.resident/10",
+        "sum_i32/worker.wasm.clone/10",
+        "sum_i32/worker.wasm.copy/10",
+        "sum_i32/worker.wasm.transfer/10",
+        "sum_i32/worker.wasm.resident/10",
+        "sum_i32/worker.ts.clone/100",
+        "sum_i32/worker.ts.copy/100",
+        "sum_i32/worker.ts.transfer/100",
+        "sum_i32/worker.ts.resident/100",
+        "sum_i32/worker.wasm.clone/100",
+        "sum_i32/worker.wasm.copy/100",
+        "sum_i32/worker.wasm.transfer/100",
+        "sum_i32/worker.wasm.resident/100",
+        "sum_i32/worker.ts.clone/1000",
+        "sum_i32/worker.ts.copy/1000",
+        "sum_i32/worker.ts.transfer/1000",
+        "sum_i32/worker.ts.resident/1000",
+        "sum_i32/worker.wasm.clone/1000",
+        "sum_i32/worker.wasm.copy/1000",
+        "sum_i32/worker.wasm.transfer/1000",
+        "sum_i32/worker.wasm.resident/1000",
+        "sum_i32/worker.ts.clone/10000",
+        "sum_i32/worker.ts.copy/10000",
+        "sum_i32/worker.ts.transfer/10000",
+        "sum_i32/worker.ts.resident/10000",
+        "sum_i32/worker.wasm.clone/10000",
+        "sum_i32/worker.wasm.copy/10000",
+        "sum_i32/worker.wasm.transfer/10000",
+        "sum_i32/worker.wasm.resident/10000",
+        "sum_i32/worker.ts.clone/100000",
+        "sum_i32/worker.ts.copy/100000",
+        "sum_i32/worker.ts.transfer/100000",
+        "sum_i32/worker.ts.resident/100000",
+        "sum_i32/worker.wasm.clone/100000",
+        "sum_i32/worker.wasm.copy/100000",
+        "sum_i32/worker.wasm.transfer/100000",
+        "sum_i32/worker.wasm.resident/100000",
+        "sum_i32/worker.ts.clone/1000000",
+        "sum_i32/worker.ts.copy/1000000",
+        "sum_i32/worker.ts.transfer/1000000",
+        "sum_i32/worker.ts.resident/1000000",
+        "sum_i32/worker.wasm.clone/1000000",
+        "sum_i32/worker.wasm.copy/1000000",
+        "sum_i32/worker.wasm.transfer/1000000",
+        "sum_i32/worker.wasm.resident/1000000"
+      ]
+    },
+    "timing": "performance.now on the page's main thread; Worker cases time whole batches of sequential round trips",
+    "worker": {
+      "type": "module",
+      "script": "bench/browser/worker.ts",
+      "instances": "one dedicated Worker per page, created before any case and shared by that page's Worker cases",
+      "messaging": "Worker.postMessage / DedicatedWorkerGlobalScope.postMessage, one reply per request, sequential",
+      "control": "a MessageChannel created by the Worker, used only to set up cases outside timing",
+      "wasm": "default build, fetched and instantiated inside the Worker",
+      "sharedMemory": "none (no SharedArrayBuffer or Atomics)"
+    },
+    "equivalence": "checked in every page after measurement, for the thread it measured"
+  },
+  "options": {
+    "warmup": 5,
+    "samples": 30,
+    "sampleMs": 20
+  },
+  "conditions": {
+    "warnings": [],
+    "officialCriteriaMet": true
+  },
+  "failedUnits": []
+}
