@@ -14,7 +14,7 @@ What has been built, and what is planned but not implemented. Current capabiliti
 | v0.6.0 | WebAssembly boundary paths in Node.js, Bun and Deno: inlineable and no-inline calls, copy and resident input, default and `simd128` builds ([wasm.md](wasm.md)) |
 | v0.7.0 | Browsers (Chromium, Firefox): the boundary suite on the main thread, and main → Worker → TypeScript/WASM paths that separate structured clone, explicit copy and transfer ([browser.md](browser.md)) |
 
-The first runs to meet the official criteria cover every runtime path and every browser path of v0.7.0. Their raw data is committed ([findings.md](findings.md#official-results)). Earlier pinned runs were development runs with `powersave` and turbo on.
+The first runs to meet the official criteria cover every runtime path and every browser path of v0.7.0. Their raw data is committed ([findings.md](findings.md#official-results)), with a normalized dataset in `results/normalized/` ([methodology.md](methodology.md#normalized-dataset)). Earlier pinned runs were development runs with `powersave` and turbo on.
 
 ## Planned
 
@@ -78,19 +78,12 @@ A zero-copy return of native-owned memory would be measured as its own named str
 
 ### Results and publication
 
-- normalised datasets (`results/normalized/results.json`, `results.csv`) and charts (`results/charts/`)
-- a public report answering *how expensive is crossing the TypeScript native boundary?* It would include:
-  - methodology and environment
-  - raw data and normalised datasets
-  - comparison tables
-  - latency and throughput charts
-  - break-even curves
-  - interpretation and limitations
+- a public report answering *how expensive is crossing the TypeScript native boundary?* A first version is in `site/`: English and Brazilian Portuguese, with interpretation, links to methodology, raw runs and the normalized dataset, and charts drawn from `results/normalized/`. It is published by `.github/workflows/pages.yml`. Still missing: break-even curves and throughput charts.
 - confidence intervals or statistical tests instead of the 5% spread heuristic
 
 ### Continuous integration
 
-CI would check that everything compiles, that every integration still runs, and that performance has not regressed catastrophically. It would never produce official numbers (see [methodology.md](methodology.md#publishing-results)).
+CI would check that everything compiles, that every integration still runs, and that performance has not regressed catastrophically. It would never produce official numbers (see [methodology.md](methodology.md#publishing-results)). The Pages workflow already checks the dataset and the report on every push to `main`, but builds no native code and runs no benchmark.
 
 ### Platforms
 

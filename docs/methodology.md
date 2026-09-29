@@ -182,6 +182,7 @@ When `--runs` > 1, `scripts/bench.ts` prints the same variance table and compute
 5. Publish the fresh-process and shared-process results side by side. In the variance table, report every `unstable` case as unstable, not as a single number. Report every case in the isolation divergence table with both numbers.
 6. Restore the machine with `make teardown`.
 7. To publish, commit the whole `results/raw/<run-id>/` directory. `results/raw/*` is git-ignored, so add it with `git add -f results/raw/<run-id>`.
+8. Add the directory to `OFFICIAL_RUNS` in `scripts/normalize-results.ts`, run `make normalize`, and commit `results/normalized/` with it (see [Normalized dataset](#normalized-dataset)).
 
 ## Output
 
@@ -207,9 +208,24 @@ Raw sample arrays are copied unchanged from each process's output into these fil
 
 Browser runs write `environment.json` with `kind: "browser"`, plus `<browser>.main.json` and `<browser>.worker.json`. Their extra metadata includes browser and engine versions, page-reported user agent, timer and isolation, fetched artifact hashes, WASM target features and the Worker configuration; see [browser.md](browser.md#recorded-metadata).
 
+## Normalized dataset
+
+`make normalize` (`node scripts/normalize-results.ts`) turns the published official runs into one dataset in `results/normalized/`. It reads the run directories listed in `OFFICIAL_RUNS`, never writes to them, and refuses a directory whose `conditions.officialCriteriaMet` is not true, that has condition warnings or failed units, or whose git tree was dirty.
+
+- `results.json`: one record per source run, environment, isolation mode and case id.
+  - identity: `key`, `source` (run id), `environment` (the raw file's `runtime`: `node`, `bun`, `deno`, `scriptc` or `<browser>.<thread>`), `kind`, `runtime`, `browser`, `thread`, `version`
+  - case: `suite`, `op`, `id`, `path` (the id's path segment), `impl`, `binding`, `strategy`, `ownership`, `variant`, `size`, `payload_kind`, `payload_bytes`, `payload_count`
+  - `isolation`: `case` (fresh process or browser) or `runtime` (shared). The two modes are always separate records.
+  - `runs`: each per-run median (`ns_per_op.median` of that run) with the raw `file` and `index` into its `results` array, `run` and `sequence`
+  - statistics, with the definitions of `make compare`: `median_ns` (median of the per-run medians), `min_run_ns`, `max_run_ns`, `spread` ((max − min) / median), `stability` (`unstable` above 5%: report the range, not `median_ns`), `divergent` (the isolation divergence rule above), `official`
+- `results.csv`: the same records without the raw pointers, one row each, with the per-run medians as `run1_ns` … `run3_ns`.
+- `metadata.json`: the definitions, counts, and per source run: directory, commit and dirty flag, conditions, harness options, methodology (profile, isolation, runs, order, seed, CPUs, pinning), machine and pinned-CPU settings, software versions, artifact hashes, and the SHA-256 of every raw file read.
+
+Case ids are never merged: paths with different semantics (`ffi.borrowed`, `wasm.copy`, `worker.wasm.clone`, …) stay separate records. The output contains no generation timestamp, so the same inputs give byte-identical files. Before writing, the script checks that every case in `methodology.casesByRuntime` appears once per mode with every run, and nothing else. `tests/normalize.test.ts` (part of `make test`) checks those counts again, traces every per-run median back to its raw record, compares the raw files' hashes, and fails when the committed dataset differs from a fresh generation.
+
 ## Publishing results
 
 - **Record the environment.** Results without `environment.json` should not be treated as authoritative. It records the hardware, OS, CPU topology and power settings, every runtime and compiler version, the native artifact hashes, the commit and every methodology setting.
 - **Keep raw data.** Aggregated numbers never replace raw measurements. Commit the whole run directory, so the numbers can be re-analysed without rerunning them.
 - **Separate facts from interpretation.** "Node-API `noop` median: X ns/op" is a measured fact. "FFI reduced call overhead in this environment" is an interpretation. Never present an interpretation as a measured fact.
-- **Not from shared CI.** Virtualisation, noisy neighbours, power management and unknown hardware make shared CI runners unsuitable for official numbers. CI can check that everything builds and runs, but there is no CI yet (see [roadmap.md](roadmap.md)).
+- **Not from shared CI.** Virtualisation, noisy neighbours, power management and unknown hardware make shared CI runners unsuitable for official numbers. The only workflow, `.github/workflows/pages.yml`, regenerates the normalized dataset from the committed runs, checks the report and publishes it to GitHub Pages; it never runs a benchmark. Build and test CI does not exist yet (see [roadmap.md](roadmap.md)).

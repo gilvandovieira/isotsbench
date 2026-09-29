@@ -45,8 +45,14 @@ bench/browser/        browser page, main-thread cases, Worker (worker.ts) and it
 scripts/bench.ts      runtime orchestrator      scripts/bench-browser.ts  browser orchestrator
 scripts/build.ts      builds build/*            scripts/browser.ts        browser launch + local server
 scripts/compare.ts    run-to-run variance       scripts/system.ts         read-only sysfs probe
-tests/                wasm.test.ts, browser.test.ts
+scripts/normalize-results.ts  results/normalized/ from the official runs in OFFICIAL_RUNS
+scripts/serve-site.ts         serves build/site/ under /isotsbench/, as GitHub Pages does
+tests/                wasm.test.ts, browser.test.ts, system-setup.test.ts, normalize.test.ts, site.test.ts, pages.test.ts
 results/raw/<run-id>/ raw output (git-ignored)
+results/normalized/   results.json, results.csv, metadata.json (committed, generated)
+site/                 static report (GitHub Pages): index.html, app.js, charts.js, styles.css, i18n/{en,pt-BR}.json;
+                      data -> ../results/normalized (charts read it; the copy quotes no numbers of its own)
+.github/workflows/pages.yml  on push to main: make site-check, then publish build/site/ to GitHub Pages
 docs/                 see "Documentation to keep current"
 ```
 
@@ -63,7 +69,7 @@ docs/                 see "Documentation to keep current"
 
 ```bash
 make check                        # cargo clippy -D warnings + deno check of every entry point and test
-make test                         # cargo test, build (no scriptc), tests/{wasm,browser,system-setup}.test.ts
+make test                         # cargo test, build (no scriptc), tests/{wasm,browser,system-setup}.test.ts, make site-check
 make build                        # everything in build/, including scriptc when installed
 
 make bench-quick                  # smoke: one shared process per runtime, short batches. Numbers meaningless.
@@ -78,6 +84,10 @@ make bench-browser                # fresh browser per case, 1 run
 make bench-browser-official CPUS=2,8,10
 
 make compare RUNS="results/raw/<a> results/raw/<b>"
+make normalize                    # regenerate results/normalized/ from the official runs
+make site                         # build/site/: the report with its data symlink resolved
+make site-check                   # dataset, copy and built site (Chromium under /isotsbench/ when found; required in CI)
+make site-serve                   # http://127.0.0.1:8000/isotsbench/
 ```
 
 - Runtime orchestrator options (`node scripts/bench.ts`): `--runtimes`, `--isolation case|runtime|both`, `--runs`, `--order shuffle|fixed`, `--seed`, `--cpus`, `--official`, `--suite`, `--warmup`, `--samples`, `--sample-ms`, `--filter`.
@@ -106,6 +116,8 @@ make compare RUNS="results/raw/<a> results/raw/<b>"
 - `results/raw/<run-id>/environment.json`: hardware, OS, CPU topology, governor/turbo, runtime and compiler versions, artifact SHA-256, git commit and `dirty`, full methodology, seed, options, `conditions.warnings`, `conditions.officialCriteriaMet`, `failedUnits`. Browser runs add `kind: "browser"`, browser and engine versions, page-reported timer and isolation, fetched WASM hashes, WASM target features and the Worker configuration.
 - `<runtime>.json` (or `<browser>.<thread>.json`): every result with raw samples, `run`, `isolation`, `sequence`, `process`.
 - `results/raw/*` is git-ignored. Publishing a run means committing the whole directory: `git add -f results/raw/<run-id>`. Only do that when asked.
+- CI (`.github/workflows/pages.yml`) only rebuilds, checks and publishes committed evidence. Never make it run a benchmark or produce numbers.
+- `results/normalized/` is generated from the runs in `OFFICIAL_RUNS` (`scripts/normalize-results.ts`); never edit it by hand. One record per run, environment, isolation mode and case id, with per-run medians pointing to their raw records and the `make compare` definitions of spread and divergence. A published official run must be added to `OFFICIAL_RUNS` and the dataset regenerated; `tests/normalize.test.ts` fails while it is stale.
 
 **Development vs official.**
 
