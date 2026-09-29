@@ -4,7 +4,7 @@ members = ["native/rust-core", "native/napi", "native/ffi", "native/scriptc", "n
 
 [workspace.package]
 # Matches the latest release tag (vX.Y.Z); bump it together with the tag.
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 publish = false
 license = "MIT OR Apache-2.0"
