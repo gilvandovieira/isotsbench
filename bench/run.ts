@@ -10,9 +10,10 @@ import os from "node:os";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { buildCaseIds, buildCases, checkEquivalence } from "./common/cases.ts";
-import { caseGroup, formatDataRate, formatNs, formatRate, table } from "./common/format.ts";
 import { parseSuites, suiteOf } from "./common/suites.ts";
-import { type CaseResult, measure, type Options, TIMER } from "./common/harness.ts";
+import { hrtimeClock } from "./common/clock-hrtime.ts";
+import { measure, type Options } from "./common/harness.ts";
+import { printResults } from "./common/report.ts";
 
 const RESULT_SCHEMA_VERSION = 2;
 
@@ -38,29 +39,6 @@ function positiveInt(name: string, value: string): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new Error(`--${name} must be a positive integer, got "${value}"`);
   return n;
-}
-
-function printResults(results: CaseResult[]): void {
-  const tsMedian = new Map(
-    results.filter((r) => r.impl === "ts").map((r) => [caseGroup(r.id), r.ns_per_op.median]),
-  );
-  const rows = results.map((r) => {
-    const s = r.ns_per_op;
-    const baseline = tsMedian.get(caseGroup(r.id));
-    const ratio = r.impl !== "ts" && baseline ? `${(s.median / baseline).toFixed(2)}×` : "";
-    return [
-      r.id,
-      formatNs(s.median),
-      `${formatRate(r.ops_per_s)}ops/s`,
-      formatDataRate(r.op, r.payload, s.median),
-      `${((s.stddev / s.mean) * 100).toFixed(1)}%`,
-      formatNs(s.min),
-      formatNs(s.max),
-      String(r.iterations),
-      ratio,
-    ];
-  });
-  console.log(table(["case", "median/op", "throughput", "data rate", "rsd", "min/op", "max/op", "iters", "vs ts"], rows));
 }
 
 function main(): void {
@@ -106,7 +84,7 @@ function main(): void {
   const startedAt = new Date().toISOString();
   const results = cases.map((c, i) => {
     console.error(`  [${i + 1}/${cases.length}] ${c.id}`);
-    return measure(c, options);
+    return measure(c, options, hrtimeClock);
   });
   const finishedAt = new Date().toISOString();
 
@@ -129,7 +107,7 @@ function main(): void {
         allowedCpuCount: os.availableParallelism(),
         execArgv: process.execArgv,
       },
-      timer: TIMER,
+      timer: hrtimeClock.name,
       options,
       equivalence: "checked after measurement, for the suites of the measured cases",
       startedAt,

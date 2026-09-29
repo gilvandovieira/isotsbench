@@ -3,9 +3,13 @@
 // A sample times `iterations` calls in one batch; ns/op is derived from the
 // batch. Iterations are calibrated per case so each sample lasts roughly
 // `sampleMs`, keeping timer overhead negligible for tiny operations.
+//
+// The clock is supplied by the runtime's entry point: process.hrtime.bigint
+// under Node.js, Bun and Deno (clock-hrtime.ts), performance.now under
+// scriptc, which has no hrtime (bench/scriptc/clock.ts). Each result records
+// which one measured it.
 
-import process from "node:process";
-import type { Case } from "./cases.ts";
+import type { Case } from "./case.ts";
 import type { Payload } from "./payloads.ts";
 import { type Suite, suiteOf } from "./suites.ts";
 
@@ -13,6 +17,12 @@ export interface Options {
   warmup: number;
   samples: number;
   sampleMs: number;
+}
+
+/** Times one batch of `c.run(iterations)`, in ns, keeping its result observable. */
+export interface Clock {
+  readonly name: string;
+  timeBatch(c: Case, iterations: number): number;
 }
 
 export interface Stats {
@@ -27,7 +37,7 @@ export interface CaseResult {
   id: string;
   op: string;
   impl: string;
-  /** "none", "node-api", "bun:ffi" or "Deno.dlopen"; absent in results recorded before FFI paths existed. */
+  /** "none", "node-api", "bun:ffi", "Deno.dlopen" or "scriptc-ffi"; absent in results recorded before FFI paths existed. */
   binding?: string;
   size: number | null;
   /** Payload flavour (string_len: "ascii" or "utf8"); null otherwise. Absent before M3. */
@@ -36,9 +46,9 @@ export interface CaseResult {
   payload?: Payload | null;
   /** "boundary", "payload" or "return". Absent before suites existed (derive it with suiteOf(op)). */
   suite?: Suite;
-  /** Return cases: result representation when a path has several ("objects", "packed"); null otherwise. */
+  /** Result representation when a path has several ("objects", "packed", "borrowed"); null otherwise. */
   strategy?: string | null;
-  /** Return cases: allocation/fill/copy strategy of the result; null otherwise. */
+  /** Allocation/fill/copy/borrow strategy of the data; null where not recorded. */
   ownership?: string | null;
   iterations: number;
   /** Raw elapsed time of each warmup batch, in ns. Not used for stats. */
@@ -51,27 +61,16 @@ export interface CaseResult {
   ops_per_s: number;
 }
 
-export const TIMER = "process.hrtime.bigint";
 const MAX_ITERATIONS = 2 ** 30;
 
-// Keeps every batch result observable so the work cannot be optimised away.
-let sink = 0;
-
-function timeBatch(c: Case, iterations: number): number {
-  const start = process.hrtime.bigint();
-  const result = c.run(iterations);
-  const elapsed = process.hrtime.bigint() - start;
-  sink = (sink + result) | 0;
-  return Number(elapsed);
-}
-
 /** Doubles the batch size until one batch reaches the target, then scales to it. */
-function calibrate(c: Case, targetNs: number): number {
+function calibrate(c: Case, targetNs: number, clock: Clock): number {
   let iterations = 1;
   for (;;) {
-    const elapsed = timeBatch(c, iterations);
+    const elapsed = clock.timeBatch(c, iterations);
     if (elapsed >= targetNs || iterations >= MAX_ITERATIONS) {
-      return Math.min(MAX_ITERATIONS, Math.max(1, Math.round((iterations * targetNs) / Math.max(elapsed, 1))));
+      const scaled = Math.round((iterations * targetNs) / (elapsed > 1 ? elapsed : 1));
+      return scaled < 1 ? 1 : scaled > MAX_ITERATIONS ? MAX_ITERATIONS : scaled;
     }
     iterations *= 2;
   }
@@ -87,12 +86,12 @@ export function summarize(values: number[]): Stats {
   return { median, mean, stddev: Math.sqrt(variance), min: sorted[0], max: sorted[n - 1] };
 }
 
-export function measure(c: Case, options: Options): CaseResult {
-  const iterations = calibrate(c, options.sampleMs * 1e6);
+export function measure(c: Case, options: Options, clock: Clock): CaseResult {
+  const iterations = calibrate(c, options.sampleMs * 1e6, clock);
   const warmup_ns: number[] = [];
-  for (let i = 0; i < options.warmup; i++) warmup_ns.push(timeBatch(c, iterations));
+  for (let i = 0; i < options.warmup; i++) warmup_ns.push(clock.timeBatch(c, iterations));
   const samples_ns: number[] = [];
-  for (let i = 0; i < options.samples; i++) samples_ns.push(timeBatch(c, iterations));
+  for (let i = 0; i < options.samples; i++) samples_ns.push(clock.timeBatch(c, iterations));
 
   const ns_per_op = summarize(samples_ns.map((ns) => ns / iterations));
   return {

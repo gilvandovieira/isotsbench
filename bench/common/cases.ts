@@ -6,36 +6,35 @@
 // Every loop folds results into its return value so calls cannot be
 // eliminated as dead code.
 
+import type { Case, Impl } from "./case.ts";
+import {
+  type BoundaryPath,
+  checkBoundary,
+  checkPayload,
+  checkScalarReturn,
+  expectNumber,
+  expectString,
+  expectTrue,
+  type PayloadPath,
+} from "./checks.ts";
 import * as ts from "./ts-impl.ts";
 import { loadNapi } from "./napi.ts";
 import { ffiBinding, loadFfi } from "./ffi.ts";
-import { bytesPayload, type Payload, PAYLOAD_SIZES, stringPayload } from "./payloads.ts";
+import {
+  bytesPayload,
+  makeI32Data,
+  PAYLOAD_SIZES,
+  RETURN_STRING_SIZES,
+  ROW_COUNTS,
+  STRING_VARIANTS,
+  type StringVariant,
+  stringPayload,
+  SUM_I32_SIZES,
+} from "./payloads.ts";
 import { decodeRows, PACKED_ROW_SIZE, type Row } from "./rows.ts";
 import type { Suite } from "./suites.ts";
 
-/** ts: pure TypeScript; napi: Node-API addon; ffi: C ABI via the runtime's FFI (Bun, Deno only). */
-export type Impl = "ts" | "napi" | "ffi";
-
-export interface Case {
-  id: string;
-  op: string;
-  impl: Impl;
-  /** Mechanism crossing into native code: "none", "node-api", "bun:ffi" or "Deno.dlopen". */
-  binding: string;
-  /** Workload size for scalable operations: elements for sum_i32, payload bytes for the marshalling cases. */
-  size: number | null;
-  /** Payload flavour where an operation has several (string_len: "ascii" or "utf8"). */
-  variant?: string;
-  /** What crosses the boundary, and how much of it. */
-  payload?: Payload;
-  /** Return cases only: how the result is represented when a path has several ("objects" or "packed" rows). */
-  strategy?: string;
-  /** Return cases only: who allocates the result, who fills it, and what is copied (see docs/methodology.md). */
-  ownership?: string;
-  run(iterations: number): number;
-}
-
-export const SUM_I32_SIZES = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000];
+export type { Case, Impl } from "./case.ts";
 
 const napi = loadNapi();
 const ffi = loadFfi();
@@ -79,10 +78,6 @@ const ffiFillUtf8 = ffi?.fill_string_utf8;
 const ffiFillBytes = ffi?.fill_bytes;
 const ffiFillRows = ffi?.fill_rows_packed;
 
-export const STRING_VARIANTS = ["ascii", "utf8"] as const;
-/** UTF-8 bytes of the returned strings. */
-export const RETURN_STRING_SIZES = [16, 64, 1024, 64 * 1024];
-export const ROW_COUNTS = [1, 10, 100, 1_000, 10_000];
 
 /** Ownership strategies of the return cases; documented in docs/methodology.md. */
 const OWNERSHIP = {
@@ -95,17 +90,6 @@ const OWNERSHIP = {
   nativeObjects: "native-objects",
   packed: "js-alloc+native-fill+js-decode",
 } as const;
-
-/** Deterministic pseudo-random i32 values (LCG), identical in every runtime. */
-export function makeI32Data(size: number): Int32Array {
-  const data = new Int32Array(size);
-  let x = 0x2545f491;
-  for (let i = 0; i < size; i++) {
-    x = (Math.imul(x, 1103515245) + 12345) | 0;
-    data[i] = x;
-  }
-  return data;
-}
 
 function sumTsLoop(iterations: number, data: Int32Array): number {
   let acc = 0;
@@ -565,44 +549,31 @@ export function buildCaseIds(): string[] {
  * being measured.
  */
 export function checkEquivalence(suites: readonly Suite[]): void {
-  if (suites.includes("boundary")) checkBoundary();
-  if (suites.includes("payload")) checkPayload();
+  if (suites.includes("boundary")) checkBoundaryPaths();
+  if (suites.includes("payload")) checkPayloadPaths();
   if (suites.includes("return")) checkReturn();
 }
 
-function expect(label: string, actual: unknown, expected: unknown): void {
-  if (!Object.is(actual, expected)) {
-    throw new Error(`equivalence check failed: ${label}: got ${actual}, expected ${expected}`);
-  }
-}
-
-function checkBoundary(): void {
-  const paths: { name: string; noop(): void; add_i32(a: number, b: number): number; sum(d: Int32Array): number }[] = [
-    { name: "napi", noop: napiNoop, add_i32: napiAdd, sum: napiSum },
+function checkBoundaryPaths(): void {
+  const paths: BoundaryPath[] = [
+    { name: "napi", noopReturnsUndefined: () => napiNoop() === undefined, add_i32: napiAdd, sum_i32: napiSum },
   ];
-  if (ffi) paths.push({ name: "ffi", noop: ffi.noop, add_i32: ffi.add_i32, sum: (d) => ffi.sum_i32(d, d.length) });
-
-  expect("ts noop", tsNoop(), undefined);
-  const pairs: [number, number][] = [[0, 0], [2, 3], [-7, 3], [2147483647, 1], [-2147483648, -1]];
-  const view = makeI32Data(64).subarray(3, 40);
-  for (const path of paths) {
-    expect(`${path.name} noop`, path.noop(), undefined);
-    for (const [a, b] of pairs) expect(`${path.name} add_i32(${a}, ${b})`, path.add_i32(a, b), tsAdd(a, b));
-    for (const size of [0, ...SUM_I32_SIZES]) {
-      const data = makeI32Data(size);
-      expect(`${path.name} sum_i32 size ${size}`, path.sum(data), tsSum(data));
-    }
-    expect(`${path.name} sum_i32 offset view`, path.sum(view), tsSum(view));
+  if (ffi) {
+    paths.push({
+      name: "ffi",
+      noopReturnsUndefined: () => ffi.noop() === undefined,
+      add_i32: ffi.add_i32,
+      sum_i32: (d) => ffi.sum_i32(d, d.length),
+    });
   }
+  expectTrue("ts noop returns undefined", tsNoop() === undefined);
+  checkBoundary(paths);
 }
 
-function checkPayload(): void {
-  const paths: {
-    name: string;
-    string_len(s: string): number;
-    bytes_len(d: Uint8Array): number;
-    checksum(d: Uint8Array): number;
-  }[] = [{ name: "napi", string_len: napiStringLen, bytes_len: napiBytesLen, checksum: napiChecksum }];
+function checkPayloadPaths(): void {
+  const paths: PayloadPath[] = [
+    { name: "napi", string_len: napiStringLen, bytes_len: napiBytesLen, checksum_bytes: napiChecksum },
+  ];
   if (ffi) {
     paths.push({
       name: "ffi",
@@ -612,55 +583,26 @@ function checkPayload(): void {
         return ffi.string_len(scratch, encoder.encodeInto(s, scratch).written!);
       },
       bytes_len: (d) => ffi.bytes_len(d, d.length),
-      checksum: (d) => ffi.checksum_bytes(d, d.length),
+      checksum_bytes: (d) => ffi.checksum_bytes(d, d.length),
     });
   }
-
-  // Every payload size, plus edge cases: lone surrogates (encoded as U+FFFD),
-  // a sliced string, an empty string and offset views of byte buffers.
-  const strings: [string, string][] = [
-    ["empty", ""],
-    ["lone high surrogate", "a\ud800b"],
-    ["trailing high surrogate", "ab\ud83d"],
-    ["sliced utf8", stringPayload("utf8", 1024).slice(1, -1)],
-  ];
-  for (const variant of STRING_VARIANTS) {
-    for (const bytes of PAYLOAD_SIZES) {
-      const value = stringPayload(variant, bytes);
-      expect(`${variant} payload of ${bytes} B has that many UTF-8 bytes`, encoder.encode(value).length, bytes);
-      strings.push([`${variant} ${bytes} B`, value]);
-    }
-  }
-  for (const [label, value] of strings) {
-    expect(`ts string_len ${label} matches TextEncoder`, tsStringLen(value), encoder.encode(value).length);
-  }
-  const buffers: [string, Uint8Array][] = [
-    ...[0, ...PAYLOAD_SIZES].map((bytes): [string, Uint8Array] => [`${bytes} B`, bytesPayload(bytes)]),
-    ["offset view", bytesPayload(1024).subarray(3, 1000)],
-  ];
-
-  for (const path of paths) {
-    for (const [label, value] of strings) {
-      expect(`${path.name} string_len ${label}`, path.string_len(value), tsStringLen(value));
-    }
-    for (const [label, data] of buffers) {
-      expect(`${path.name} bytes_len ${label}`, path.bytes_len(data), tsBytesLen(data));
-      expect(`${path.name} checksum_bytes ${label}`, path.checksum(data), tsChecksum(data));
-    }
-  }
+  checkPayload(paths);
 }
 
+/**
+ * Return path: the scalar check is shared (checks.ts); strings, buffers and
+ * rows are returned only by Node-API and Bun/Deno FFI, so they are checked here.
+ */
 function checkReturn(): void {
+  checkScalarReturn([{ name: "napi", return_f64: napiReturnF64 }, ...(ffi ? [{ name: "ffi", return_f64: ffi.return_f64 }] : [])]);
   // Each helper returns exactly what the corresponding benchmark loop produces.
   const paths: {
     name: string;
-    f64(): number;
-    string(variant: (typeof STRING_VARIANTS)[number], bytes: number): string;
+    string(variant: StringVariant, bytes: number): string;
     bytes(bytes: number): Uint8Array;
     rows: [string, (count: number) => Row[]][];
   }[] = [{
     name: "napi",
-    f64: napiReturnF64,
     string: (variant, bytes) => (variant === "ascii" ? napiReturnAscii(bytes) : napiReturnUtf8(bytes)),
     bytes: napiReturnBytes,
     rows: [["objects", napiReturnRows], ["packed", (count) => decodeRows(napiReturnRowsPacked(count), count)]],
@@ -668,72 +610,68 @@ function checkReturn(): void {
   if (ffi) {
     paths.push({
       name: "ffi",
-      f64: ffi.return_f64,
       string: (variant, bytes) => {
         const out = new Uint8Array(bytes);
         const written = (variant === "ascii" ? ffi.fill_string_ascii : ffi.fill_string_utf8)(out, bytes);
-        expect(`ffi fill_string_${variant} ${bytes} B written`, written, bytes);
+        expectNumber(`ffi fill_string_${variant} ${bytes} B written`, written, bytes);
         return decoder.decode(out);
       },
       bytes: (bytes) => {
         const out = new Uint8Array(bytes);
-        expect(`ffi fill_bytes ${bytes} B written`, ffi.fill_bytes(out, bytes), bytes);
+        expectNumber(`ffi fill_bytes ${bytes} B written`, ffi.fill_bytes(out, bytes), bytes);
         return out;
       },
       rows: [["packed", (count) => {
         const out = new Uint8Array(count * PACKED_ROW_SIZE);
-        expect(`ffi fill_rows_packed ${count} rows written`, ffi.fill_rows_packed(out, out.length), count);
+        expectNumber(`ffi fill_rows_packed ${count} rows written`, ffi.fill_rows_packed(out, out.length), count);
         return decodeRows(out, count);
       }]],
     });
   }
 
   const expectRows = (label: string, actual: Row[], expected: Row[]) => {
-    expect(`${label} length`, actual.length, expected.length);
+    expectNumber(`${label} length`, actual.length, expected.length);
     for (let i = 0; i < expected.length; i++) {
       const a = actual[i];
       const e = expected[i];
-      expect(`${label}[${i}] keys`, Object.keys(a).join(), Object.keys(e).join());
-      expect(`${label}[${i}].id`, a.id, e.id);
-      expect(`${label}[${i}].score`, a.score, e.score);
-      expect(`${label}[${i}].active`, a.active, e.active);
-      expect(`${label}[${i}].name`, a.name, e.name);
+      expectString(`${label}[${i}] keys`, Object.keys(a).join(), Object.keys(e).join());
+      expectNumber(`${label}[${i}].id`, a.id, e.id);
+      expectNumber(`${label}[${i}].score`, a.score, e.score);
+      expectTrue(`${label}[${i}].active`, a.active === e.active);
+      expectString(`${label}[${i}].name`, a.name, e.name);
     }
   };
 
-  expect("ts return_f64", tsReturnF64(), 1.5);
   for (const path of paths) {
-    expect(`${path.name} return_f64`, path.f64(), tsReturnF64());
-
     for (const variant of STRING_VARIANTS) {
       // 0 and 23 cover the empty string and the utf8 pattern tail.
       for (const bytes of [0, 23, ...RETURN_STRING_SIZES]) {
         const value = path.string(variant, bytes);
-        expect(`${path.name} return_string ${variant} ${bytes} B`, value, ts.expectedReturnString(variant, bytes));
-        expect(`${path.name} return_string ${variant} ${bytes} B is UTF-8 sized`, encoder.encode(value).length, bytes);
+        expectString(`${path.name} return_string ${variant} ${bytes} B`, value, ts.expectedReturnString(variant, bytes));
+        expectNumber(`${path.name} return_string ${variant} ${bytes} B is UTF-8 sized`, encoder.encode(value).length, bytes);
       }
     }
     // A returned string must not alias native memory reused by later calls.
     const kept = path.string("utf8", 1024);
     path.string("ascii", 64 * 1024);
-    expect(`${path.name} return_string survives a later call`, kept, ts.expectedReturnString("utf8", 1024));
+    expectString(`${path.name} return_string survives a later call`, kept, ts.expectedReturnString("utf8", 1024));
 
     for (const bytes of [0, ...PAYLOAD_SIZES]) {
       const actual = path.bytes(bytes);
       const expected = tsReturnBytes(bytes);
       const label = `${path.name} return_bytes ${bytes} B`;
-      expect(`${label} is a Uint8Array`, actual instanceof Uint8Array, true);
+      expectTrue(`${label} is a Uint8Array`, actual instanceof Uint8Array);
       // The result owns a whole buffer of its own: not a view into a pool or native memory.
-      expect(`${label} byteOffset`, actual.byteOffset, 0);
-      expect(`${label} buffer size`, actual.buffer.byteLength, bytes);
+      expectNumber(`${label} byteOffset`, actual.byteOffset, 0);
+      expectNumber(`${label} buffer size`, actual.buffer.byteLength, bytes);
       let mismatch = -1;
       for (let i = 0; i < bytes && mismatch < 0; i++) if (actual[i] !== expected[i]) mismatch = i;
-      expect(`${label} first differing byte`, mismatch, -1);
+      expectNumber(`${label} first differing byte`, mismatch, -1);
     }
     const first = path.bytes(64);
     const second = path.bytes(64);
     first[0] ^= 0xff;
-    expect(`${path.name} return_bytes results are independent`, second[0], tsReturnBytes(64)[0]);
+    expectNumber(`${path.name} return_bytes results are independent`, second[0], tsReturnBytes(64)[0]);
 
     for (const [strategy, make] of path.rows) {
       for (const count of [0, ...ROW_COUNTS]) {

@@ -18,7 +18,7 @@ test:
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
-	deno check bench/run.ts scripts/*.ts
+	deno check bench/run.ts bench/scriptc/run.ts scripts/*.ts
 
 # Fresh process per case, shuffled order, one run, unpinned.
 bench:

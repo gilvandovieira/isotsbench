@@ -1,0 +1,13 @@
+[package]
+name = "isotsbench-scriptc"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# scriptc links FFI code from static archives or objects, not shared libraries.
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+isotsbench-core = { path = "../rust-core" }

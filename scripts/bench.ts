@@ -4,7 +4,7 @@
 //
 //   node scripts/bench.ts [options]
 //
-//   --runtimes node,bun,deno   runtimes to run (missing ones are skipped)
+//   --runtimes node,bun,deno,scriptc   runtimes to run (missing ones are skipped)
 //   --isolation case|runtime|both
 //                              fresh process per case (default), one shared process per
 //                              runtime, or both modes in the same shuffled repetitions
@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { caseGroup, formatDataRate, formatNs, table } from "../bench/common/format.ts";
 import { parseSuites, type Suite, SUITE_NAMES } from "../bench/common/suites.ts";
-import { buildNative } from "./build.ts";
+import { buildNative, buildScriptc, SCRIPTC_EXECUTABLE, type ScriptcBuild, scriptcVersion } from "./build.ts";
 import {
   type CaseVariance,
   caseVariance,
@@ -43,12 +43,20 @@ import { assessConditions, formatCpuList, parseCpuList, probeSystem } from "./sy
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RESULT_SCHEMA_VERSION = 2;
 
-// Relative to ROOT, which every process runs in.
+// Relative to ROOT, which every process runs in. scriptc is not an
+// interpreter: its benchmark is an executable built by scripts/build.ts.
 const RUNTIME_COMMANDS: Record<string, string[]> = {
   node: ["node", "bench/run.ts"],
   bun: ["bun", "bench/run.ts"],
   deno: ["deno", "run", "--allow-read", "--allow-write", "--allow-ffi", "bench/run.ts"],
+  scriptc: [SCRIPTC_EXECUTABLE],
 };
+
+/** A runtime's version, or null when it is not installed. */
+function runtimeVersion(rt: string): string | null {
+  if (rt === "scriptc") return scriptcVersion();
+  return capture(RUNTIME_COMMANDS[rt][0], ["--version"])?.split("\n")[0] ?? null;
+}
 
 interface Plan {
   profile: "official" | "standard";
@@ -208,7 +216,7 @@ function collectEnvironment(
   runtimes: Record<string, string | null>,
   caseIds: string[],
   casesByRuntime: Record<string, string[]>,
-  native: ReturnType<typeof buildNative>,
+  native: ReturnType<typeof buildNative> & { scriptc?: ScriptcBuild },
 ) {
   const rustc = capture("rustc", ["-vV"]) ?? "";
   const rustcField = (key: string) => rustc.match(new RegExp(`^${key}: (.*)$`, "m"))?.[1] ?? null;
@@ -297,7 +305,7 @@ function printSummary(variances: CaseVariance[], runs: number, mode: string | nu
             : []),
           ...paths.map((path) => {
             const v = find(group, path);
-            return v ? formatDataRate(v.op, v.payload, v.median) : "-";
+            return v ? formatDataRate(v.op, v.payload, v.median, v.strategy) : "-";
           }),
         ];
       });
@@ -378,15 +386,16 @@ function main(): void {
     if (offline.length) throw new Error(`--cpus includes CPUs that are not online: ${formatCpuList(offline)}`);
   }
 
-  const native = buildNative();
-
   const versions: Record<string, string | null> = {};
   for (const rt of requested) {
-    versions[rt] = capture(RUNTIME_COMMANDS[rt][0], ["--version"])?.split("\n")[0] ?? null;
+    versions[rt] = runtimeVersion(rt);
     if (versions[rt] === null) console.error(`skipping ${rt}: not found on PATH`);
   }
   const available = requested.filter((rt) => versions[rt] !== null);
   if (!available.length) throw new Error("no requested runtime is available");
+
+  const native: ReturnType<typeof buildNative> & { scriptc?: ScriptcBuild } = buildNative();
+  if (available.includes("scriptc")) native.scriptc = buildScriptc();
 
   // Each runtime lists the cases it supports (Node.js has no FFI path).
   const casesByRuntime: Record<string, string[]> = {};

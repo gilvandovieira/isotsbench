@@ -15,7 +15,7 @@ export function formatRate(perSecond: number): string {
 }
 
 export function table(header: string[], rows: string[][]): string {
-  const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
+  const widths = header.map((h, i) => rows.reduce((w, r) => (r[i].length > w ? r[i].length : w), h.length));
   const line = (cells: string[]) =>
     cells.map((c, i) => (i === 0 ? c.padEnd(widths[i]) : c.padStart(widths[i]))).join("  ");
   return [line(header), widths.map((w) => "-".repeat(w)).join("  "), ...rows.map(line)].join("\n");
@@ -31,8 +31,10 @@ export function caseGroup(id: string): string {
   return parts.join("/");
 }
 
-// bytes_len only hands a buffer over and never reads it: its time does not
-// depend on the payload size, so a data rate would be meaningless.
+// bytes_len only hands a buffer over and never reads it, and a "borrowed"
+// path (scriptc's string ingress) passes the string's own bytes without
+// reading or converting them: their time does not depend on the payload
+// size, so a data rate would be meaningless.
 const PAYLOAD_NOT_READ = new Set(["bytes_len"]);
 
 /**
@@ -43,8 +45,9 @@ export function formatDataRate(
   op: string,
   payload: { bytes?: number; count?: number } | null | undefined,
   nsPerOp: number,
+  strategy?: string | null,
 ): string {
-  if (!payload || PAYLOAD_NOT_READ.has(op)) return "-";
+  if (!payload || PAYLOAD_NOT_READ.has(op) || strategy === "borrowed") return "-";
   if (payload.count !== undefined) return `${formatRate((payload.count * 1e9) / nsPerOp)}rows/s`;
   if (payload.bytes !== undefined) return `${formatRate((payload.bytes * 1e9) / nsPerOp)}B/s`;
   return "-";

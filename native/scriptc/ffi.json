@@ -1,0 +1,14 @@
+{
+  "ffi_format": 1,
+  "functions": [
+    { "name": "isotsbench_noop", "symbol": "isotsbench_noop", "params": [], "returns": "void" },
+    { "name": "isotsbench_add_i32", "symbol": "isotsbench_add_i32", "params": ["i32", "i32"], "returns": "i32" },
+    { "name": "isotsbench_return_f64", "symbol": "isotsbench_return_f64", "params": [], "returns": "f64" },
+    { "name": "isotsbench_scriptc_sum_i32", "symbol": "isotsbench_scriptc_sum_i32", "params": ["bytes"], "returns": "i32" },
+    { "name": "isotsbench_scriptc_string_len", "symbol": "isotsbench_scriptc_string_len", "params": ["string"], "returns": "u32" },
+    { "name": "isotsbench_scriptc_bytes_len", "symbol": "isotsbench_scriptc_bytes_len", "params": ["bytes"], "returns": "u32" },
+    { "name": "isotsbench_scriptc_checksum_bytes", "symbol": "isotsbench_scriptc_checksum_bytes", "params": ["bytes"], "returns": "u32" }
+  ],
+  "libraries": ["../../target/release/libisotsbench_scriptc.a"],
+  "system_libraries": ["gcc_s", "util", "rt", "pthread", "m", "dl", "c"]
+}

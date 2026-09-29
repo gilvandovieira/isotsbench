@@ -42,8 +42,10 @@ export interface CaseVariance {
   op: string;
   impl: string;
   size: number | null;
-  /** What crosses the boundary per call (bytes or record count); null for scalar cases and pre-M3 results. */
+  /** What crosses the boundary per call (bytes or record count); null for scalar cases and results before v0.4.0. */
   payload: { bytes?: number; count?: number } | null;
+  /** Result representation when a path has several ("objects", "packed", "borrowed"); null otherwise. */
+  strategy: string | null;
   /** "boundary", "payload" or "return"; derived from the operation for results recorded before suites. */
   suite: Suite;
   runMedians: { source: string; run: number; median: number }[];
@@ -107,6 +109,7 @@ export function caseVariance(runSets: RunSet[], caseOrder: string[] = []): CaseV
         impl: r.impl,
         size: r.size,
         payload: r.payload ?? null,
+        strategy: r.strategy ?? null,
         suite: r.suite ?? suiteOf(r.op),
         runMedians: [],
         median: 0,
@@ -239,6 +242,7 @@ function comparableSettings(env: Json): Record<string, string> {
     "suites": m.suites ? m.suites.join(",") : "all",
     "napi sha256": env.native?.napi?.sha256?.slice(0, 12) ?? "n/a",
     "ffi sha256": env.native?.ffi?.sha256?.slice(0, 12) ?? "n/a",
+    "scriptc executable sha256": env.native?.scriptc?.executable?.sha256?.slice(0, 12) ?? "n/a",
     "warmup/samples/sample-ms": `${env.options?.warmup}/${env.options?.samples}/${env.options?.sampleMs}`,
     "governors": [...new Set(cpus.map((c) => c.governor))].join(",") || (env.cpuGovernor ?? "n/a"),
     "turbo": system.intelPstate?.noTurbo === "1" || system.cpufreqBoost === "0"

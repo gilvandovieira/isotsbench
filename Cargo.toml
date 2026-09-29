@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["native/rust-core", "native/napi", "native/ffi"]
+members = ["native/rust-core", "native/napi", "native/ffi", "native/scriptc"]
 
 [workspace.package]
 # Matches the latest release tag (vX.Y.Z); bump it together with the tag.
