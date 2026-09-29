@@ -4,32 +4,32 @@ version = 4
 
 [[package]]
 name = "isotsbench-core"
-version = "0.6.0"
+version = "0.7.0"
 
 [[package]]
 name = "isotsbench-ffi"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "isotsbench-core",
 ]
 
 [[package]]
 name = "isotsbench-napi"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "isotsbench-core",
 ]
 
 [[package]]
 name = "isotsbench-scriptc"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "isotsbench-core",
 ]
 
 [[package]]
 name = "isotsbench-wasm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "isotsbench-core",
 ]
