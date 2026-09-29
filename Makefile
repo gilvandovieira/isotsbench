@@ -14,14 +14,16 @@ build:
 	node scripts/build.ts
 
 # The TypeScript tests need the addon, the FFI library and the WASM builds, not the scriptc executable.
+# The browser tests skip any browser that is not installed (CHROMIUM_PATH / FIREFOX_PATH select one).
 test:
 	cargo test --workspace
 	node scripts/build.ts --skip-scriptc
 	node tests/wasm.test.ts
+	node tests/browser.test.ts
 
 check:
 	cargo clippy --workspace --all-targets -- -D warnings
-	deno check bench/run.ts bench/scriptc/run.ts bench/browser/page.ts bench/browser/worker.ts scripts/*.ts tests/wasm.test.ts
+	deno check bench/run.ts bench/scriptc/run.ts bench/browser/page.ts bench/browser/worker.ts scripts/*.ts tests/*.ts
 
 # Fresh process per case, shuffled order, one run, unpinned.
 bench:
